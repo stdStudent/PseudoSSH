@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -36,6 +37,15 @@ func (s *server) run() {
 
 		case CmdLogin:
 			s.login(cmd.client, cmd.args)
+
+		case CmdPwd:
+			s.pwd(cmd.client)
+
+		case CmdWrite:
+			s.write(cmd.client, cmd.args)
+
+		case CmdRead:
+			s.read(cmd.client, cmd.args)
 
 		case CmdJoin:
 			s.join(cmd.client, cmd.args)
@@ -110,8 +120,60 @@ func (s *server) login(c *client, args []string) {
 		c.msg("Wrong password.")
 		return
 	} else {
+		c.isLoggedIn = true
+		c.actDir = users_path + c.nick + "/home"
+		c.homeDir = "/home"
+		c.currDir = c.homeDir
+		_ = os.MkdirAll(c.actDir, os.ModePerm)
 		c.msg("You successfully logged in.")
 	}
+}
+
+func (s *server) pwd(c *client) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first with /login")
+		return
+	}
+
+	c.msg(c.currDir)
+}
+
+func (s *server) write(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first with /login")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "write [filename] [text]"`)
+		return
+	}
+
+	err := os.WriteFile(filepath.Join(c.actDir, args[1]), []byte(args[2]), 0755)
+	if err != nil {
+		c.err(err)
+	} else {
+		c.msg(fmt.Sprintf("You have successfully written text to '%s'", args[1]))
+	}
+}
+
+func (s *server) read(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first with /login")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "read [filename]"`)
+		return
+	}
+
+	text, err := os.ReadFile(filepath.Join(c.actDir, args[1]))
+	if err != nil {
+		c.err(err)
+	}
+
+	c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
 }
 
 func (s *server) join(c *client, args []string) {

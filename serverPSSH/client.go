@@ -8,11 +8,15 @@ import (
 )
 
 type client struct {
-	conn     net.Conn
-	nick     string
-	pswd     string
-	room     *room
-	commands chan<- command
+	conn       net.Conn
+	isLoggedIn bool
+	nick       string
+	pswd       string
+	actDir     string
+	homeDir    string
+	currDir    string
+	room       *room
+	commands   chan<- command
 }
 
 func (c *client) readInput() {
@@ -38,6 +42,26 @@ func (c *client) readInput() {
 		case "/login":
 			c.commands <- command{
 				id:     CmdLogin,
+				client: c,
+				args:   args,
+			}
+
+		case "pwd":
+			c.commands <- command{
+				id:     CmdPwd,
+				client: c,
+			}
+
+		case "write":
+			c.commands <- command{
+				id:     CmdWrite,
+				client: c,
+				args:   args,
+			}
+
+		case "read":
+			c.commands <- command{
+				id:     CmdRead,
 				client: c,
 				args:   args,
 			}
