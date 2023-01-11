@@ -16,6 +16,7 @@ import (
 )
 
 const users_path string = "users/"
+const db_path string = "db/"
 
 type server struct {
 	rooms    map[string]*room
@@ -79,7 +80,7 @@ func (s *server) reg(c *client, args []string) {
 	}
 
 	c.nick = args[1]
-	if _, err := os.Stat(users_path + c.nick + ".json"); err == nil {
+	if _, err := os.Stat(db_path + c.nick + ".json"); err == nil {
 		c.msg(fmt.Sprintf("User %s already exists.", c.nick))
 		return
 	}
@@ -91,7 +92,7 @@ func (s *server) reg(c *client, args []string) {
 	value, _ := sjson.Set("", "nick", c.nick)
 	value, _ = sjson.Set(value, "pswd", c.pswd)
 
-	_ = os.WriteFile(users_path+c.nick+".json", []byte(value), 0755)
+	_ = os.WriteFile(db_path+c.nick+".json", []byte(value), 0755)
 
 	c.msg("You have successfully registered.")
 }
@@ -103,7 +104,7 @@ func (s *server) login(c *client, args []string) {
 	}
 
 	c.nick = args[1]
-	if _, err := os.Stat(users_path + c.nick + ".json"); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(db_path + c.nick + ".json"); errors.Is(err, os.ErrNotExist) {
 		c.msg(fmt.Sprintf("User %s does NOT exists.", c.nick))
 		return
 	}
@@ -112,7 +113,7 @@ func (s *server) login(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	c.pswd = hex.EncodeToString(h.Sum(nil))
 
-	content, _ := ioutil.ReadFile(users_path + c.nick + ".json")
+	content, _ := ioutil.ReadFile(db_path + c.nick + ".json")
 	db := string(content)
 	pswd := gjson.Get(db, "pswd")
 
@@ -149,7 +150,7 @@ func (s *server) write(c *client, args []string) {
 		return
 	}
 
-	err := os.WriteFile(filepath.Join(c.actDir, args[1]), []byte(args[2]), 0755)
+	err := os.WriteFile(filepath.Join(c.actDir, args[1]), []byte(strings.Join(args[2:], " ")), 0755)
 	if err != nil {
 		c.err(err)
 	} else {
@@ -168,9 +169,19 @@ func (s *server) read(c *client, args []string) {
 		return
 	}
 
-	text, err := os.ReadFile(filepath.Join(c.actDir, args[1]))
-	if err != nil {
+	isFullPath := strings.HasPrefix(args[1], users_path)
+	var err error
+	var text []byte
+
+	if isFullPath {
+		text, err = os.ReadFile(args[1])
+	} else {
+		text, err = os.ReadFile(filepath.Join(c.actDir, args[1]))
+	}
+
+	if err != nil { // Couldn't read from file
 		c.err(err)
+		return
 	}
 
 	c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
