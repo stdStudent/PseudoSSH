@@ -66,6 +66,13 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
+		case "ls":
+			c.commands <- command{
+				id:     CmdLs,
+				client: c,
+				args:   args,
+			}
+
 		case "/join":
 			c.commands <- command{
 				id:     CmdJoin,

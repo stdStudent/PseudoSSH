@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
-	"io/ioutil"
+	"io/fs"
 	"log"
 	"net"
 	"os"
@@ -47,6 +47,9 @@ func (s *server) run() {
 
 		case CmdRead:
 			s.read(cmd.client, cmd.args)
+
+		case CmdLs:
+			s.ls(cmd.client, cmd.args)
 
 		case CmdJoin:
 			s.join(cmd.client, cmd.args)
@@ -113,7 +116,7 @@ func (s *server) login(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	c.pswd = hex.EncodeToString(h.Sum(nil))
 
-	content, _ := ioutil.ReadFile(db_path + c.nick + ".json")
+	content, _ := os.ReadFile(db_path + c.nick + ".json")
 	db := string(content)
 	pswd := gjson.Get(db, "pswd")
 
@@ -185,6 +188,45 @@ func (s *server) read(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
+}
+
+func (s *server) ls(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first with /login")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "ls [dir]". Use "ls ." for the current directory.`)
+		return
+	}
+
+	isFullPath := strings.HasPrefix(args[1], users_path)
+	var err error
+	var files []fs.DirEntry
+
+	if isFullPath {
+		files, err = os.ReadDir(args[1])
+	} else {
+		if strings.HasPrefix(args[1], "../../..") {
+			c.msg("Cannot go higher that root directory.")
+			return
+		}
+		files, err = os.ReadDir(filepath.Join(c.actDir, args[1]))
+	}
+
+	if err != nil { // Couldn't read from dir
+		c.err(err)
+		return
+	}
+
+	var listOfFiles string
+	for _, file := range files {
+		listOfFiles += file.Name()
+		listOfFiles += " "
+	}
+
+	c.msg(fmt.Sprintf("Files from directory '%s':\n%s", args[1], listOfFiles))
 }
 
 func (s *server) join(c *client, args []string) {

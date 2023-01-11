@@ -8,6 +8,7 @@ const (
 	CmdPwd
 	CmdWrite
 	CmdRead
+	CmdLs
 	CmdJoin
 	CmdRooms
 	CmdMsg
