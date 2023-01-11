@@ -1,11 +1,20 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
+
+const users_path string = "users/"
 
 type server struct {
 	rooms    map[string]*room
@@ -23,7 +32,10 @@ func (s *server) run() {
 	for cmd := range s.commands {
 		switch cmd.id {
 		case CmdNick:
-			s.nick(cmd.client, cmd.args)
+			s.reg(cmd.client, cmd.args)
+
+		case CmdLogin:
+			s.login(cmd.client, cmd.args)
 
 		case CmdJoin:
 			s.join(cmd.client, cmd.args)
@@ -50,14 +62,56 @@ func (s *server) newClient(conn net.Conn) *client {
 	}
 }
 
-func (s *server) nick(c *client, args []string) {
-	if len(args) < 2 {
-		c.msg(`A name is required. Example: "/nick Michael"`)
+func (s *server) reg(c *client, args []string) {
+	if len(args) < 3 {
+		c.msg(`A nick and a password are required. Example: "/reg NICK PASSWORD"`)
 		return
 	}
 
 	c.nick = args[1]
-	c.msg(fmt.Sprintf("Your nickname has been set to %s", c.nick))
+	if _, err := os.Stat(users_path + c.nick + ".json"); err == nil {
+		c.msg(fmt.Sprintf("User %s already exists.", c.nick))
+		return
+	}
+
+	h := sha1.New()
+	h.Write([]byte(args[2]))
+	c.pswd = hex.EncodeToString(h.Sum(nil))
+
+	value, _ := sjson.Set("", "nick", c.nick)
+	value, _ = sjson.Set(value, "pswd", c.pswd)
+
+	_ = os.WriteFile(users_path+c.nick+".json", []byte(value), 0755)
+
+	c.msg("You have successfully registered.")
+}
+
+func (s *server) login(c *client, args []string) {
+	if len(args) < 3 {
+		c.msg(`A nick and a password are required. Example: "/login NICK PASSWORD"`)
+		return
+	}
+
+	c.nick = args[1]
+	if _, err := os.Stat(users_path + c.nick + ".json"); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("User %s does NOT exists.", c.nick))
+		return
+	}
+
+	h := sha1.New()
+	h.Write([]byte(args[2]))
+	c.pswd = hex.EncodeToString(h.Sum(nil))
+
+	content, _ := ioutil.ReadFile(users_path + c.nick + ".json")
+	db := string(content)
+	pswd := gjson.Get(db, "pswd")
+
+	if pswd.String() != c.pswd {
+		c.msg("Wrong password.")
+		return
+	} else {
+		c.msg("You successfully logged in.")
+	}
 }
 
 func (s *server) join(c *client, args []string) {

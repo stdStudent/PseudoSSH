@@ -10,6 +10,7 @@ import (
 type client struct {
 	conn     net.Conn
 	nick     string
+	pswd     string
 	room     *room
 	commands chan<- command
 }
@@ -27,9 +28,16 @@ func (c *client) readInput() {
 		cmd := strings.TrimSpace(args[0])
 
 		switch cmd {
-		case "/nick":
+		case "/reg":
 			c.commands <- command{
 				id:     CmdNick,
+				client: c,
+				args:   args,
+			}
+
+		case "/login":
+			c.commands <- command{
+				id:     CmdLogin,
 				client: c,
 				args:   args,
 			}
