@@ -1,11 +1,26 @@
 package main
 
 import (
+	"github.com/tidwall/sjson"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 )
 
 func main() {
+	matches, _ := filepath.Glob(filepath.Join(db_path, "*"))
+	for _, file := range matches {
+		content, _ := os.ReadFile(file)
+		db := string(content)
+		db, _ = sjson.Set(db, "isActive", false)
+		err := os.WriteFile(file, []byte(db), 0755)
+		if err != nil {
+			log.Printf(err.Error())
+		}
+	}
+
+	// The server itself
 	s := newServer()
 	go s.run()
 

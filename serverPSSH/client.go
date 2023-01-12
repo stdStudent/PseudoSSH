@@ -32,14 +32,14 @@ func (c *client) readInput() {
 		cmd := strings.TrimSpace(args[0])
 
 		switch cmd {
-		case "/reg":
+		case "reg":
 			c.commands <- command{
 				id:     CmdNick,
 				client: c,
 				args:   args,
 			}
 
-		case "/login":
+		case "login":
 			c.commands <- command{
 				id:     CmdLogin,
 				client: c,
@@ -69,6 +69,19 @@ func (c *client) readInput() {
 		case "ls":
 			c.commands <- command{
 				id:     CmdLs,
+				client: c,
+				args:   args,
+			}
+
+		case "logout":
+			c.commands <- command{
+				id:     CmdLogout,
+				client: c,
+			}
+
+		case "help":
+			c.commands <- command{
+				id:     CmdHelp,
 				client: c,
 				args:   args,
 			}

@@ -51,6 +51,12 @@ func (s *server) run() {
 		case CmdLs:
 			s.ls(cmd.client, cmd.args)
 
+		case CmdLogout:
+			s.logout(cmd.client)
+
+		case CmdHelp:
+			s.help(cmd.client, cmd.args)
+
 		case CmdJoin:
 			s.join(cmd.client, cmd.args)
 
@@ -78,7 +84,7 @@ func (s *server) newClient(conn net.Conn) *client {
 
 func (s *server) reg(c *client, args []string) {
 	if len(args) < 3 {
-		c.msg(`A nick and a password are required. Example: "/reg NICK PASSWORD"`)
+		c.msg(`A nick and a password are required. Example: "reg [nick] [pswd]"`)
 		return
 	}
 
@@ -92,17 +98,17 @@ func (s *server) reg(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	c.pswd = hex.EncodeToString(h.Sum(nil))
 
-	value, _ := sjson.Set("", "nick", c.nick)
-	value, _ = sjson.Set(value, "pswd", c.pswd)
+	db, _ := sjson.Set("", "nick", c.nick)
+	db, _ = sjson.Set(db, "pswd", c.pswd)
 
-	_ = os.WriteFile(db_path+c.nick+".json", []byte(value), 0755)
+	_ = os.WriteFile(db_path+c.nick+".json", []byte(db), 0755)
 
 	c.msg("You have successfully registered.")
 }
 
 func (s *server) login(c *client, args []string) {
 	if len(args) < 3 {
-		c.msg(`A nick and a password are required. Example: "/login NICK PASSWORD"`)
+		c.msg(`A nick and a password are required. Example: "login [nick] [pswd]"`)
 		return
 	}
 
@@ -116,26 +122,41 @@ func (s *server) login(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	c.pswd = hex.EncodeToString(h.Sum(nil))
 
-	content, _ := os.ReadFile(db_path + c.nick + ".json")
+	pathToFile := db_path + c.nick + ".json"
+	content, _ := os.ReadFile(pathToFile)
 	db := string(content)
-	pswd := gjson.Get(db, "pswd")
 
+	isActive := gjson.Get(db, "isActive")
+	if isActive.Bool() {
+		c.msg("This user is already logged in.")
+		return
+	}
+
+	pswd := gjson.Get(db, "pswd")
 	if pswd.String() != c.pswd {
 		c.msg("Wrong password.")
 		return
 	} else {
 		c.isLoggedIn = true
+
+		db, _ = sjson.Set(db, "isActive", true)
+		err := os.WriteFile(pathToFile, []byte(db), 0755)
+		if err != nil {
+			log.Printf("Could NOU open file '%s'", db_path+c.nick+".json")
+		}
+
 		c.actDir = users_path + c.nick + "/home"
 		c.homeDir = "/home"
 		c.currDir = c.homeDir
 		_ = os.MkdirAll(c.actDir, os.ModePerm)
+
 		c.msg("You successfully logged in.")
 	}
 }
 
 func (s *server) pwd(c *client) {
 	if !c.isLoggedIn {
-		c.msg("You must log in first with /login")
+		c.msg("You must log in first.")
 		return
 	}
 
@@ -144,7 +165,7 @@ func (s *server) pwd(c *client) {
 
 func (s *server) write(c *client, args []string) {
 	if !c.isLoggedIn {
-		c.msg("You must log in first with /login")
+		c.msg("You must log in first.")
 		return
 	}
 
@@ -163,7 +184,7 @@ func (s *server) write(c *client, args []string) {
 
 func (s *server) read(c *client, args []string) {
 	if !c.isLoggedIn {
-		c.msg("You must log in first with /login")
+		c.msg("You must log in first.")
 		return
 	}
 
@@ -192,7 +213,7 @@ func (s *server) read(c *client, args []string) {
 
 func (s *server) ls(c *client, args []string) {
 	if !c.isLoggedIn {
-		c.msg("You must log in first with /login")
+		c.msg("You must log in first.")
 		return
 	}
 
@@ -227,6 +248,69 @@ func (s *server) ls(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("Files from directory '%s':\n%s", args[1], listOfFiles))
+}
+
+func (s *server) logout(c *client) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	pathToFile := db_path + c.nick + ".json"
+	content, _ := os.ReadFile(pathToFile)
+	db := string(content)
+	db, _ = sjson.Set(db, "isActive", false)
+	err := os.WriteFile(pathToFile, []byte(db), 0755)
+	if err != nil {
+		log.Printf(err.Error())
+	}
+
+	c.nick = ""
+	c.pswd = ""
+	c.actDir = ""
+	c.homeDir = ""
+	c.currDir = ""
+	c.isLoggedIn = false
+
+	c.msg("You successfully logged out.")
+}
+
+func (s *server) help(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "help [cmd]"`)
+		return
+	}
+
+	switch args[1] {
+	case "help":
+		c.msg("'help' prints help. Usage: help [cmd]")
+		break
+
+	case "ls":
+		c.msg("'ls' lists files of directory. Usage: ls [dir]")
+		break
+
+	case "write":
+		c.msg("'write' inputs text to a file. Usage: write [file] [text]")
+		break
+
+	case "read":
+		c.msg("'read' outputs text from a file. Usage: read [file]")
+		break
+
+	case "logout":
+		c.msg("'logout' shut a user down. Usage: guess it yourself.")
+		break
+
+	case "pwd":
+		c.msg("'pwd' prints current directory. Usage: guess it yourself.")
+		break
+	}
 }
 
 func (s *server) join(c *client, args []string) {

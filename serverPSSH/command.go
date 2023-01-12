@@ -9,6 +9,8 @@ const (
 	CmdWrite
 	CmdRead
 	CmdLs
+	CmdLogout
+	CmdHelp
 	CmdJoin
 	CmdRooms
 	CmdMsg
