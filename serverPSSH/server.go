@@ -33,8 +33,11 @@ func newServer() *server {
 func (s *server) run() {
 	for cmd := range s.commands {
 		switch cmd.id {
-		case CmdNick:
+		case CmdReg:
 			s.reg(cmd.client, cmd.args)
+
+		case CmdChPswd:
+			s.chpswd(cmd.client, cmd.args)
 
 		case CmdLogin:
 			s.login(cmd.client, cmd.args)
@@ -56,6 +59,9 @@ func (s *server) run() {
 
 		case CmdHelp:
 			s.help(cmd.client, cmd.args)
+
+		case CmdRmUser:
+			s.rmuser(cmd.client, cmd.args)
 
 		case CmdJoin:
 			s.join(cmd.client, cmd.args)
@@ -83,27 +89,79 @@ func (s *server) newClient(conn net.Conn) *client {
 }
 
 func (s *server) reg(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can register users.")
+		return
+	}
+
 	if len(args) < 3 {
 		c.msg(`A nick and a password are required. Example: "reg [nick] [pswd]"`)
 		return
 	}
 
-	c.nick = args[1]
-	if _, err := os.Stat(db_path + c.nick + ".json"); err == nil {
-		c.msg(fmt.Sprintf("User %s already exists.", c.nick))
+	nick := args[1]
+	if _, err := os.Stat(db_path + nick + ".json"); err == nil {
+		c.msg(fmt.Sprintf("User %s already exists. Use 'chpswd' to change password for a user.", nick))
 		return
 	}
 
 	h := sha1.New()
 	h.Write([]byte(args[2]))
-	c.pswd = hex.EncodeToString(h.Sum(nil))
+	pswd := hex.EncodeToString(h.Sum(nil))
 
-	db, _ := sjson.Set("", "nick", c.nick)
-	db, _ = sjson.Set(db, "pswd", c.pswd)
+	db, _ := sjson.Set("", "nick", nick)
+	db, _ = sjson.Set(db, "pswd", pswd)
 
-	_ = os.WriteFile(db_path+c.nick+".json", []byte(db), 0755)
+	_ = os.WriteFile(db_path+nick+".json", []byte(db), 0755)
 
-	c.msg("You have successfully registered.")
+	c.msg(fmt.Sprintf("You have successfully registered '%s'.", nick))
+}
+
+func (s *server) chpswd(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can register users.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`A nick and a password are required. Example: "chpswd [nick] [pswd]"`)
+		return
+	}
+
+	nick := args[1]
+	if _, err := os.Stat(db_path + nick + ".json"); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("User %s does NOT exists.", c.nick))
+		return
+	}
+
+	h := sha1.New()
+	h.Write([]byte(args[2]))
+	new_pswd := hex.EncodeToString(h.Sum(nil))
+
+	pathToFile := db_path + nick + ".json"
+	content, _ := os.ReadFile(pathToFile)
+	db := string(content)
+
+	old_pswd := gjson.Get(db, "pswd").String()
+	if old_pswd == new_pswd {
+		c.msg("Current password and new passwords are the same. Proceeding nothing.")
+		return
+	}
+
+	db, _ = sjson.Set(db, "pswd", new_pswd)
+	_ = os.WriteFile(db_path+nick+".json", []byte(db), 0755)
+
+	c.msg(fmt.Sprintf("You have successfully changed password for '%s'.", nick))
 }
 
 func (s *server) login(c *client, args []string) {
@@ -138,6 +196,7 @@ func (s *server) login(c *client, args []string) {
 		return
 	} else {
 		c.isLoggedIn = true
+		c.isAdmin = gjson.Get(db, "isAdmin").Bool()
 
 		db, _ = sjson.Set(db, "isActive", true)
 		err := os.WriteFile(pathToFile, []byte(db), 0755)
@@ -311,6 +370,47 @@ func (s *server) help(c *client, args []string) {
 		c.msg("'pwd' prints current directory. Usage: guess it yourself.")
 		break
 	}
+}
+
+func (s *server) rmuser(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can remove users.")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "rmuser [nick]"`)
+		return
+	}
+
+	nick := args[1]
+	if _, err := os.Stat(db_path + nick + ".json"); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("User '%s' does NOT exists.", nick))
+		return
+	}
+
+	err := os.Remove(db_path + nick + ".json")
+	if err != nil {
+		log.Printf(err.Error())
+		c.err(err)
+		return
+	}
+
+	if _, err := os.Stat(users_path + nick); err == nil {
+		err := os.RemoveAll(users_path + nick)
+		if err != nil {
+			log.Printf(err.Error())
+			c.err(err)
+			return
+		}
+	}
+
+	c.msg(fmt.Sprintf("You have successfully removed '%s'", nick))
 }
 
 func (s *server) join(c *client, args []string) {

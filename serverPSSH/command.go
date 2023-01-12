@@ -3,7 +3,8 @@ package main
 type commandID int
 
 const (
-	CmdNick commandID = iota
+	CmdReg commandID = iota
+	CmdChPswd
 	CmdLogin
 	CmdPwd
 	CmdWrite
@@ -11,6 +12,7 @@ const (
 	CmdLs
 	CmdLogout
 	CmdHelp
+	CmdRmUser
 	CmdJoin
 	CmdRooms
 	CmdMsg

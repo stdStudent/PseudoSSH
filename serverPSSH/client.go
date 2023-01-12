@@ -10,6 +10,7 @@ import (
 type client struct {
 	conn       net.Conn
 	isLoggedIn bool
+	isAdmin    bool
 	nick       string
 	pswd       string
 	actDir     string
@@ -34,7 +35,14 @@ func (c *client) readInput() {
 		switch cmd {
 		case "reg":
 			c.commands <- command{
-				id:     CmdNick,
+				id:     CmdReg,
+				client: c,
+				args:   args,
+			}
+
+		case "chpswd":
+			c.commands <- command{
+				id:     CmdChPswd,
 				client: c,
 				args:   args,
 			}
@@ -82,6 +90,13 @@ func (c *client) readInput() {
 		case "help":
 			c.commands <- command{
 				id:     CmdHelp,
+				client: c,
+				args:   args,
+			}
+
+		case "rmuser":
+			c.commands <- command{
+				id:     CmdRmUser,
 				client: c,
 				args:   args,
 			}
