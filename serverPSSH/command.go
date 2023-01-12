@@ -13,9 +13,6 @@ const (
 	CmdLogout
 	CmdHelp
 	CmdRmUser
-	CmdJoin
-	CmdRooms
-	CmdMsg
 	CmdQuit
 )
 

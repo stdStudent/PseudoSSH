@@ -63,15 +63,6 @@ func (s *server) run() {
 		case CmdRmUser:
 			s.rmuser(cmd.client, cmd.args)
 
-		case CmdJoin:
-			s.join(cmd.client, cmd.args)
-
-		case CmdRooms:
-			s.listRooms(cmd.client)
-
-		case CmdMsg:
-			s.msg(cmd.client, cmd.args)
-
 		case CmdQuit:
 			s.quit(cmd.client)
 		}
