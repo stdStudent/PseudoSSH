@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 )
@@ -16,7 +17,6 @@ type client struct {
 	actDir     string
 	homeDir    string
 	currDir    string
-	room       *room
 	commands   chan<- command
 }
 
@@ -48,6 +48,10 @@ func (c *client) readInput() {
 			}
 
 		case "login":
+			c.commands <- command{
+				id:     CmdLogout,
+				client: c,
+			}
 			c.commands <- command{
 				id:     CmdLogin,
 				client: c,
@@ -101,7 +105,11 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
-		case "/quit":
+		case "quit":
+			c.commands <- command{
+				id:     CmdLogout,
+				client: c,
+			}
 			c.commands <- command{
 				id:     CmdQuit,
 				client: c,
@@ -114,9 +122,17 @@ func (c *client) readInput() {
 }
 
 func (c *client) err(err error) {
-	c.conn.Write([]byte("Error: " + err.Error() + "\n"))
+	write, err := c.conn.Write([]byte("Error: " + err.Error() + "\n"))
+	if err != nil {
+		log.Printf("Error c.err(): %s. Bytes written: %d", err.Error(), write)
+		return
+	}
 }
 
 func (c *client) msg(msg string) {
-	c.conn.Write([]byte("> " + msg + "\n"))
+	write, err := c.conn.Write([]byte("> " + msg + "\n"))
+	if err != nil {
+		log.Printf("Error c.msg(): %s. Bytes written: %d", err.Error(), write)
+		return
+	}
 }
