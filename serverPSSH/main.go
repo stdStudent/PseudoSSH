@@ -20,6 +20,8 @@ func main() {
 		}
 	}
 
+	_ = os.MkdirAll("files", os.ModePerm)
+
 	// The server itself
 	s := newServer()
 	go s.run()

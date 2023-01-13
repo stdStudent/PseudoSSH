@@ -22,6 +22,9 @@ type client struct {
 	currDir    string
 	commands   chan<- command
 	isConnErr  bool
+
+	// lab2
+	groups []string
 }
 
 func isNetConnClosedErr(err error) bool {

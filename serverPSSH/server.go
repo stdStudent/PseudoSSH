@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/miracl/conflate"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"io/fs"
@@ -18,6 +19,7 @@ import (
 const users_path string = "users/"
 const db_path string = "db/"
 const group_path = "group/"
+const db_files = "files/files.json"
 
 type server struct {
 	commands chan command
@@ -215,6 +217,16 @@ func (s *server) login(c *client, args []string) {
 		c.homeDir = "/home"
 		c.currDir = c.homeDir
 
+		matches, _ := filepath.Glob(filepath.Join(group_path, "*.json"))
+		for _, file := range matches {
+			content, _ := os.ReadFile(file)
+			db := string(content)
+			isInGroup, _ := inGroup(db, c.nick)
+			if isInGroup {
+				c.groups = append(c.groups, gjson.Get(db, "name").String())
+			}
+		}
+
 		c.msg("You have successfully logged in.")
 		log.Printf("A user '%s' has connected.", c.nick)
 	}
@@ -240,12 +252,32 @@ func (s *server) write(c *client, args []string) {
 		return
 	}
 
-	err := os.WriteFile(filepath.Join(c.actDir, args[1]), []byte(strings.Join(args[2:], " ")), 0755)
+	pathToFile := filepath.Join(c.actDir, args[1])
+	err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
 	if err != nil {
 		c.err(err)
-	} else {
-		c.msg(fmt.Sprintf("You have successfully written text to '%s'", args[1]))
+		return
 	}
+
+	if strings.Contains(pathToFile, ".") {
+		pathToFile = strings.ReplaceAll(pathToFile, ".", "\\.")
+	}
+
+	new_db, _ := sjson.Set("", pathToFile+".owner", c.nick)
+	new_db, _ = sjson.Set(new_db, pathToFile+".groups", c.groups)
+
+	content, _ := os.ReadFile(db_files)
+	old_db := string(content)
+
+	if old_db != "" { // files.json is empty
+		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
+		merged, _ := result.MarshalJSON()
+		_ = os.WriteFile(db_files, []byte(merged), 0755)
+	} else {
+		_ = os.WriteFile(db_files, []byte(new_db), 0755)
+	}
+
+	c.msg(fmt.Sprintf("You have successfully written text to '%s'", args[1]))
 }
 
 func (s *server) read(c *client, args []string) {
