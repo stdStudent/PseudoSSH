@@ -107,6 +107,7 @@ func (s *server) reg(c *client, args []string) {
 	db, _ = sjson.Set(db, "pswd", pswd)
 
 	_ = os.WriteFile(db_path+nick+".json", []byte(db), 0755)
+	_ = os.MkdirAll(users_path+nick+"/home", os.ModePerm)
 
 	c.msg(fmt.Sprintf("You have successfully registered '%s'.", nick))
 }
@@ -196,7 +197,6 @@ func (s *server) login(c *client, args []string) {
 		c.actDir = users_path + c.nick + "/home"
 		c.homeDir = "/home"
 		c.currDir = c.homeDir
-		_ = os.MkdirAll(c.actDir, os.ModePerm)
 
 		c.msg("You have successfully logged in.")
 	}
