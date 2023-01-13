@@ -142,6 +142,35 @@ func (c *client) readInput() {
 				client: c,
 			}
 
+		// lab 2
+		case "addgroup":
+			c.commands <- command{
+				id:     CmdAddGroup,
+				client: c,
+				args:   args,
+			}
+
+		case "u2g":
+			c.commands <- command{
+				id:     CmdU2G,
+				client: c,
+				args:   args,
+			}
+
+		case "trimgroup":
+			c.commands <- command{
+				id:     CmdTrimGroup,
+				client: c,
+				args:   args,
+			}
+
+		case "rmgroup":
+			c.commands <- command{
+				id:     CmdRmGroup,
+				client: c,
+				args:   args,
+			}
+
 		default:
 			c.err(fmt.Errorf(`unknown command "%s"`, cmd))
 		}

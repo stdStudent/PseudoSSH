@@ -15,6 +15,12 @@ const (
 	CmdRmUser
 	CmdLsUsers
 	CmdQuit
+
+	//lab2
+	CmdAddGroup
+	CmdU2G
+	CmdTrimGroup
+	CmdRmGroup
 )
 
 type command struct {

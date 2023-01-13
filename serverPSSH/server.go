@@ -17,6 +17,7 @@ import (
 
 const users_path string = "users/"
 const db_path string = "db/"
+const group_path = "group/"
 
 type server struct {
 	commands chan command
@@ -66,6 +67,19 @@ func (s *server) run() {
 
 		case CmdQuit:
 			s.quit(cmd.client)
+
+		// lab2
+		case CmdAddGroup:
+			s.addgroup(cmd.client, cmd.args)
+
+		case CmdU2G:
+			s.u2g(cmd.client, cmd.args)
+
+		case CmdTrimGroup:
+			s.trimgroup(cmd.client, cmd.args)
+
+		case CmdRmGroup:
+			s.rmgroup(cmd.client, cmd.args)
 		}
 	}
 }
@@ -457,4 +471,175 @@ func (s *server) quit(c *client) {
 	}
 
 	log.Printf("The client has left the chat: %s", leftClient)
+}
+
+// lab2
+
+func (s *server) addgroup(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can create new groups.")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "addgroup [group]"`)
+		return
+	}
+
+	group := args[1]
+	pathToFile := group_path + group + ".json"
+	if _, err := os.Stat(pathToFile); err == nil {
+		c.msg(fmt.Sprintf("Group '%s' already exists.", group))
+		return
+	}
+
+	db, _ := sjson.Set("", "name", group)
+	_ = os.MkdirAll(group_path, os.ModePerm)
+	_ = os.WriteFile(pathToFile, []byte(db), 0755)
+
+	c.msg(fmt.Sprintf("You have successfully created group '%s'", group))
+}
+
+func inGroup(db string, user string) (bool, int) {
+	userarr := gjson.Get(db, "users").Array()
+
+	isInGroup := false
+	index := -1
+	for i := range userarr {
+		if userarr[i].String() == user {
+			isInGroup = true
+			index = i
+			break
+		}
+	}
+
+	return isInGroup, index
+}
+
+func (s *server) u2g(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can create new groups.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "u2g [group] [user]"`)
+		return
+	}
+
+	group := args[1]
+	pathToFile := group_path + group + ".json"
+	if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("Group '%s' does NOT exists.", group))
+		return
+	}
+
+	user := args[2]
+	pathToUser := db_path + user + ".json"
+	if _, err := os.Stat(pathToUser); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("User '%s' does NOT exists.", user))
+		return
+	}
+
+	content, _ := os.ReadFile(pathToFile)
+	db := string(content)
+
+	isInGroup, _ := inGroup(db, user)
+	if isInGroup {
+		c.msg(fmt.Sprintf("User '%s' is already in '%s'. Proceeding nothing", user, group))
+		return
+	}
+
+	db, _ = sjson.Set(db, "users.-1", user)
+	_ = os.WriteFile(pathToFile, []byte(db), 0755)
+
+	c.msg(fmt.Sprintf("You have successfully added '%s' to group '%s'", user, group))
+}
+
+func (s *server) trimgroup(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can create new groups.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "trimgroup [group] [user]"`)
+		return
+	}
+
+	group := args[1]
+	pathToFile := group_path + group + ".json"
+	if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("Group '%s' does NOT exists.", group))
+		return
+	}
+
+	user := args[2]
+	pathToUser := db_path + user + ".json"
+	if _, err := os.Stat(pathToUser); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("User '%s' does NOT exists.", user))
+		return
+	}
+
+	content, _ := os.ReadFile(pathToFile)
+	db := string(content)
+
+	isInGroup, index := inGroup(db, user)
+	if !isInGroup {
+		c.msg(fmt.Sprintf("There's no '%s' in group '%s'. Proceeding nothing", user, group))
+		return
+	}
+
+	db, _ = sjson.Delete(db, fmt.Sprintf("users.%d", index))
+	_ = os.WriteFile(pathToFile, []byte(db), 0755)
+
+	c.msg(fmt.Sprintf("You have successfully removed '%s' from group '%s'", user, group))
+}
+
+func (s *server) rmgroup(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can remove users.")
+		return
+	}
+
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "rmgroup [group]"`)
+		return
+	}
+
+	group := args[1]
+	pathToFile := group_path + group + ".json"
+	if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+		c.msg(fmt.Sprintf("Group '%s' does NOT exists.", group))
+		return
+	}
+
+	err := os.Remove(pathToFile)
+	if err != nil {
+		log.Printf(err.Error())
+		c.err(err)
+		return
+	}
+
+	c.msg(fmt.Sprintf("You have successfully removed the group '%s'", group))
 }
