@@ -385,12 +385,21 @@ func (s *server) rmuser(c *client, args []string) {
 	}
 
 	nick := args[1]
-	if _, err := os.Stat(db_path + nick + ".json"); errors.Is(err, os.ErrNotExist) {
+	pathToFile := db_path + nick + ".json"
+	if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
 		c.msg(fmt.Sprintf("User '%s' does NOT exists.", nick))
 		return
 	}
 
-	err := os.Remove(db_path + nick + ".json")
+	content, _ := os.ReadFile(pathToFile)
+	db := string(content)
+	isActive := gjson.Get(db, "isActive").Bool()
+	if isActive {
+		c.msg("The user '%s' is logged in. Proceeding nothing.")
+		return
+	}
+
+	err := os.Remove(pathToFile)
 	if err != nil {
 		log.Printf(err.Error())
 		c.err(err)
