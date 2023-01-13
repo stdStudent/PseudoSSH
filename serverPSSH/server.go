@@ -199,6 +199,7 @@ func (s *server) login(c *client, args []string) {
 		c.currDir = c.homeDir
 
 		c.msg("You have successfully logged in.")
+		log.Printf("A user '%s' has connected.", c.nick)
 	}
 }
 
@@ -312,6 +313,8 @@ func (s *server) logout(c *client) {
 	if err != nil {
 		log.Printf(err.Error())
 	}
+
+	log.Printf("A user '%s' has disconnected.", c.nick)
 
 	c.nick = ""
 	c.pswd = ""
