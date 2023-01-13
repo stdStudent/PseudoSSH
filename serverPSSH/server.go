@@ -282,7 +282,7 @@ func (s *server) ls(c *client, args []string) {
 		files, err = os.ReadDir(args[1])
 	} else {
 		if strings.HasPrefix(args[1], "../../..") {
-			c.msg("Cannot go higher that root directory.")
+			c.msg("Cannot go higher than the root directory.")
 			return
 		}
 		files, err = os.ReadDir(filepath.Join(c.actDir, args[1]))
