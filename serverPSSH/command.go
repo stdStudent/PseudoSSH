@@ -13,6 +13,7 @@ const (
 	CmdLogout
 	CmdHelp
 	CmdRmUser
+	CmdLsUsers
 	CmdQuit
 )
 

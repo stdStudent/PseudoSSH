@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	matches, _ := filepath.Glob(filepath.Join(db_path, "*"))
+	matches, _ := filepath.Glob(filepath.Join(db_path, "*.json"))
 	for _, file := range matches {
 		content, _ := os.ReadFile(file)
 		db := string(content)

@@ -105,6 +105,12 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
+		case "lsusers":
+			c.commands <- command{
+				id:     CmdLsUsers,
+				client: c,
+			}
+
 		case "quit":
 			c.commands <- command{
 				id:     CmdLogout,

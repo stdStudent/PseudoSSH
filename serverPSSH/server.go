@@ -61,6 +61,9 @@ func (s *server) run() {
 		case CmdRmUser:
 			s.rmuser(cmd.client, cmd.args)
 
+		case CmdLsUsers:
+			s.lsusers(cmd.client)
+
 		case CmdQuit:
 			s.quit(cmd.client)
 		}
@@ -404,6 +407,30 @@ func (s *server) rmuser(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("You have successfully removed '%s'", nick))
+}
+
+func (s *server) lsusers(c *client) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAdmin {
+		c.msg("Only admin can list users.")
+		return
+	}
+
+	var total_info string
+	matches, _ := filepath.Glob(filepath.Join(db_path, "*.json"))
+	for _, file := range matches {
+		content, _ := os.ReadFile(file)
+		db := string(content)
+		total_info += "\n"
+		total_info += db
+	}
+
+	total_info = strings.ReplaceAll(total_info, "\n\n", "\n") // Might delete later?
+	c.msg(fmt.Sprintf("Users info: %s", total_info))
 }
 
 func (s *server) quit(c *client) {
