@@ -82,6 +82,9 @@ func (s *server) run() {
 
 		case CmdRmGroup:
 			s.rmgroup(cmd.client, cmd.args)
+
+		case CmdRR:
+			s.rr(cmd.client, cmd.args)
 		}
 	}
 }
@@ -715,4 +718,36 @@ func (s *server) rmgroup(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("You have successfully removed the group '%s'", group))
+}
+
+func (s *server) rr(c *client, args []string) {
+	if len(args) < 2 {
+		c.msg(`Wrong usage. Example: "rr [file]"`)
+		return
+	}
+
+	isFullPath := strings.HasPrefix(args[1], users_path)
+
+	var pathToFile string
+	if isFullPath {
+		pathToFile = args[1]
+	} else {
+		pathToFile = filepath.Join(c.actDir, args[1])
+	}
+
+	content, err := os.ReadFile(db_files)
+	if err != nil {
+		c.msg("Couldn't load database of files.")
+		log.Printf(err.Error())
+		return
+	}
+	db := string(content)
+	info := gjson.Get(db, pathToFile).String()
+
+	if info == "" {
+		c.msg("No such file in the database")
+		return
+	}
+
+	c.msg(fmt.Sprintf("File info of '%s':\n%s", pathToFile, info))
 }

@@ -21,6 +21,7 @@ const (
 	CmdU2G
 	CmdTrimGroup
 	CmdRmGroup
+	CmdRR
 )
 
 type command struct {

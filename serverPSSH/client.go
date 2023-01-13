@@ -174,6 +174,13 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
+		case "rr":
+			c.commands <- command{
+				id:     CmdRR,
+				client: c,
+				args:   args,
+			}
+
 		default:
 			c.err(fmt.Errorf(`unknown command "%s"`, cmd))
 		}
