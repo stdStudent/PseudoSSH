@@ -263,11 +263,19 @@ func (s *server) write(c *client, args []string) {
 		pathToFile = strings.ReplaceAll(pathToFile, ".", "\\.")
 	}
 
-	new_db, _ := sjson.Set("", pathToFile+".owner", c.nick)
-	new_db, _ = sjson.Set(new_db, pathToFile+".groups", c.groups)
-
 	content, _ := os.ReadFile(db_files)
 	old_db := string(content)
+
+	new_db, _ := sjson.Set("", pathToFile+".owner", c.nick)
+	if !gjson.Get(old_db, pathToFile+".groups").Exists() {
+		new_db, _ = sjson.Set(new_db, pathToFile+".groups", c.groups)
+	}
+	new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
+
+	if strings.HasPrefix(args[1], "../../..") {
+		c.msg("Cannot go higher than the root directory to write a file.")
+		return
+	}
 
 	if old_db != "" { // files.json is empty
 		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
@@ -295,18 +303,51 @@ func (s *server) read(c *client, args []string) {
 	var err error
 	var text []byte
 
+	var pathToFile string
 	if isFullPath {
-		text, err = os.ReadFile(args[1])
+		pathToFile = args[1]
 	} else {
-		text, err = os.ReadFile(filepath.Join(c.actDir, args[1]))
+		pathToFile = filepath.Join(c.actDir, args[1])
 	}
 
-	if err != nil { // Couldn't read from file
-		c.err(err)
-		return
+	content, _ := os.ReadFile(db_files)
+	db := string(content)
+	fileRights := gjson.Get(db, pathToFile+".rights").Int()
+	switch fileRights & 0b1010 {
+	case 0b1010:
+		if c.nick != gjson.Get(db, pathToFile+".owner").String() {
+			c.msg("DS: You are not the owner of this file.")
+			return
+		}
+
+		fileGroups := gjson.Get(db, pathToFile+".groups").Array()
+		if len(c.groups) < len(fileGroups) {
+			c.msg(string(rune(len(c.groups))))
+			c.msg(string(rune(len(fileGroups))))
+			c.msg("DS: You are not in ENOUGH AMOUNT OF groups for this file.")
+			return
+		}
+		for i := range fileGroups {
+			c.msg(c.groups[i])
+			c.msg(fileGroups[i].String())
+			if c.groups[i] != fileGroups[i].String() {
+				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s' for this file.", fileGroups[i].String()))
+				return
+			}
+		}
+
+		text, err = os.ReadFile(pathToFile)
+		if err != nil { // Couldn't read from file
+			c.err(err)
+			return
+		}
+
+		c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
+
+	default:
+		c.msg("DS: NOT allowed to read this file.")
 	}
 
-	c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
 }
 
 func (s *server) ls(c *client, args []string) {
