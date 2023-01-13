@@ -2,10 +2,13 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
+	"syscall"
 )
 
 type client struct {
@@ -18,13 +21,31 @@ type client struct {
 	homeDir    string
 	currDir    string
 	commands   chan<- command
+	isConnErr  bool
+}
+
+func isNetConnClosedErr(err error) bool {
+	switch {
+	case
+		errors.Is(err, net.ErrClosed),
+		errors.Is(err, io.EOF),
+		errors.Is(err, syscall.EPIPE):
+		return true
+
+	default:
+		return false
+	}
 }
 
 func (c *client) readInput() {
 	for {
 		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		if err != nil {
-			return
+		if isNetConnClosedErr(err) {
+			c.isConnErr = true
+			c.commands <- command{
+				id:     CmdLogout,
+				client: c,
+			}
 		}
 
 		msg = strings.Trim(msg, "\r\n")
@@ -128,6 +149,10 @@ func (c *client) readInput() {
 }
 
 func (c *client) err(err error) {
+	if c.isConnErr {
+		return
+	}
+
 	write, err := c.conn.Write([]byte("Error: " + err.Error() + "\n"))
 	if err != nil {
 		log.Printf("Error c.err(): %s. Bytes written: %d", err.Error(), write)
@@ -136,6 +161,10 @@ func (c *client) err(err error) {
 }
 
 func (c *client) msg(msg string) {
+	if c.isConnErr {
+		return
+	}
+
 	write, err := c.conn.Write([]byte("> " + msg + "\n"))
 	if err != nil {
 		log.Printf("Error c.msg(): %s. Bytes written: %d", err.Error(), write)

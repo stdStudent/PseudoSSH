@@ -317,7 +317,11 @@ func (s *server) logout(c *client) {
 		log.Printf(err.Error())
 	}
 
-	log.Printf("A user '%s' has disconnected.", c.nick)
+	if c.isConnErr {
+		log.Printf("A user '%s' has UNEXPECTEDLY disconnected.", c.nick)
+	} else {
+		log.Printf("A user '%s' has disconnected.", c.nick)
+	}
 
 	c.nick = ""
 	c.pswd = ""
