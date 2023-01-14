@@ -500,6 +500,20 @@ func (s *server) rmuser(c *client, args []string) {
 		return
 	}
 
+	content, _ = os.ReadFile(db_files)
+	db = string(content)
+
+	files := gjson.Parse(db)
+
+	for k, v := range files.Map() {
+		r := gjson.Get(v.Raw, "owner").String()
+		if r == nick {
+			db, _ = sjson.Delete(db, k)
+		}
+	}
+
+	_ = os.WriteFile(db_files, []byte(db), 0755)
+
 	if _, err := os.Stat(users_path + nick); err == nil {
 		err := os.RemoveAll(users_path + nick)
 		if err != nil {
