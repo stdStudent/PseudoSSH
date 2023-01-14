@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -85,6 +86,9 @@ func (s *server) run() {
 
 		case CmdRR:
 			s.rr(cmd.client, cmd.args)
+
+		case CmdChMod:
+			s.chmod(cmd.client, cmd.args)
 		}
 	}
 }
@@ -270,8 +274,10 @@ func (s *server) write(c *client, args []string) {
 	old_db := string(content)
 
 	new_db, _ := sjson.Set("", pathToFile+".owner", c.nick)
-	if !gjson.Get(old_db, pathToFile+".groups").Exists() {
-		new_db, _ = sjson.Set(new_db, pathToFile+".groups", c.groups)
+	if c.isAdmin {
+		new_db, _ = sjson.Set(new_db, pathToFile+".groups", "admins")
+	} else {
+		new_db, _ = sjson.Set(new_db, pathToFile+".groups", "users")
 	}
 	new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
 
@@ -764,4 +770,40 @@ func (s *server) rr(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("File info of '%s':\n%s", pathToFile, info))
+}
+
+func (s *server) chmod(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "chmod [file] [rwrw]" for user and group.`)
+		return
+	}
+
+	rights := args[2]
+	isFullPath := strings.HasPrefix(args[1], users_path)
+
+	var pathToFile string
+	if isFullPath {
+		pathToFile = args[1]
+	} else {
+		pathToFile = filepath.Join(c.actDir, args[1])
+	}
+
+	content, _ := os.ReadFile(db_files)
+	db := string(content)
+	if !gjson.Get(db, pathToFile).Exists() {
+		c.msg("DB: There is no such file in the database.")
+		return
+	}
+
+	irights, _ := strconv.ParseInt(rights, 2, 5)
+	db, _ = sjson.Set(db, pathToFile+".rights", irights)
+
+	_ = os.WriteFile(db_files, []byte(db), 0755)
+
+	c.msg(fmt.Sprintf("You have successfully changed rights for '%s'", pathToFile))
 }

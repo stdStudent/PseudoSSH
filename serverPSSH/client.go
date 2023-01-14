@@ -181,6 +181,13 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
+		case "chmod":
+			c.commands <- command{
+				id:     CmdChMod,
+				client: c,
+				args:   args,
+			}
+
 		default:
 			c.err(fmt.Errorf(`unknown command "%s"`, cmd))
 		}
