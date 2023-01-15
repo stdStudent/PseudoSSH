@@ -118,7 +118,7 @@ func (s *server) reg(c *client, args []string) {
 	}
 
 	if len(args) < 3 {
-		c.msg(`A nick and a password are required. Example: "reg [nick] [pswd]"`)
+		c.msg(`A nick and a password are required. Example: "reg [nick] [pswd] {cm}"`)
 		return
 	}
 
@@ -132,8 +132,15 @@ func (s *server) reg(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	pswd := hex.EncodeToString(h.Sum(nil))
 
+	var mark uint64 = 50
+	if len(args) > 3 {
+		mark, _ = strconv.ParseUint(args[3], 10, 32)
+	}
+	c.cm = mark
+
 	db, _ := sjson.Set("", "nick", nick)
 	db, _ = sjson.Set(db, "pswd", pswd)
+	db, _ = sjson.Set(db, "cm", c.cm)
 
 	_ = os.WriteFile(db_path+nick+".json", []byte(db), 0755)
 	_ = os.MkdirAll(users_path+nick+"/home", os.ModePerm)
@@ -229,14 +236,19 @@ func (s *server) login(c *client, args []string) {
 		c.isLoggedIn = true
 		c.isAdmin = gjson.Get(db, "isAdmin").Bool()
 
-		var mark uint64 = 50
+		var mark uint64 = gjson.Get(db, "cm").Uint()
+		var cm uint64
 		if len(args) > 3 {
-			mark, _ = strconv.ParseUint(args[3], 10, 32)
+			cm, _ = strconv.ParseUint(args[3], 10, 32)
+			if cm > mark {
+				c.msg(fmt.Sprintf("Mark cannot be larger than '%d'", mark))
+				return
+			}
+			mark = cm
 		}
 		c.cm = mark
 
 		db, _ = sjson.Set(db, "isActive", true)
-		db, _ = sjson.Set(db, "cm", c.cm)
 
 		err := os.WriteFile(pathToFile, []byte(db), 0755)
 		if err != nil {
@@ -301,11 +313,6 @@ func (s *server) write(c *client, args []string) {
 		fileRights := gjson.Get(old_db, pathToFile+".rights").Int()
 		switch fileRights & 0b0101 {
 		case 0b0101:
-			if c.nick != gjson.Get(old_db, pathToFile+".owner").String() {
-				c.msg("DS: You are not the owner of this file.")
-				return
-			}
-
 			isAllowedToWrite := false
 			fileGroup := gjson.Get(old_db, pathToFile+".group").String()
 			for _, group := range c.groups {
@@ -390,14 +397,8 @@ func (s *server) read(c *client, args []string) {
 	fileRights := gjson.Get(db, pathToFile+".rights").Int()
 	switch fileRights & 0b1010 {
 	case 0b1010:
-		if c.nick != gjson.Get(db, pathToFile+".owner").String() {
-			c.msg("DS: You are not the owner of this file.")
-			return
-		}
-
 		isAllowedToRead := false
 		fileGroup := gjson.Get(db, pathToFile+".group").String()
-		c.msg(fileGroup)
 		for _, group := range c.groups {
 			if group == fileGroup {
 				isAllowedToRead = true
@@ -921,11 +922,6 @@ func (s *server) append(c *client, args []string) {
 		fileRights := gjson.Get(old_db, pathToFile+".rights").Int()
 		switch fileRights & 0b0101 {
 		case 0b0101:
-			if c.nick != gjson.Get(old_db, pathToFile+".owner").String() {
-				c.msg("DS: You are not the owner of this file.")
-				return
-			}
-
 			isAllowedToWrite := false
 			fileGroup := gjson.Get(old_db, pathToFile+".group").String()
 			for _, group := range c.groups {
