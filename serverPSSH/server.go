@@ -21,6 +21,8 @@ const db_path string = "db/"
 const group_path = "group/"
 const db_files = "files/files.json"
 
+const std_mark uint64 = 50
+
 type server struct {
 	commands chan command
 }
@@ -132,11 +134,7 @@ func (s *server) reg(c *client, args []string) {
 	h.Write([]byte(args[2]))
 	pswd := hex.EncodeToString(h.Sum(nil))
 
-	var mark uint64 = 50
-	if len(args) > 3 {
-		mark, _ = strconv.ParseUint(args[3], 10, 32)
-	}
-	c.cm = mark
+	c.cm, _ = getMark(args, "")
 
 	db, _ := sjson.Set("", "nick", nick)
 	db, _ = sjson.Set(db, "pswd", pswd)
@@ -236,15 +234,10 @@ func (s *server) login(c *client, args []string) {
 		c.isLoggedIn = true
 		c.isAdmin = gjson.Get(db, "isAdmin").Bool()
 
-		var mark uint64 = gjson.Get(db, "cm").Uint()
-		var cm uint64
-		if len(args) > 3 {
-			cm, _ = strconv.ParseUint(args[3], 10, 32)
-			if cm > mark {
-				c.msg(fmt.Sprintf("Mark cannot be larger than '%d'", mark))
-				return
-			}
-			mark = cm
+		mark, mErr := getMark(args, db)
+		if mErr != nil {
+			c.err(mErr)
+			return
 		}
 		c.cm = mark
 
@@ -264,6 +257,37 @@ func (s *server) login(c *client, args []string) {
 		c.msg("You have successfully logged in.")
 		log.Printf("A user '%s' has connected.", c.nick)
 	}
+}
+
+func getMark(args []string, db string) (uint64, error) {
+	if db == "" {
+		if len(args) > 3 {
+			cm, err := strconv.ParseUint(args[3], 10, 32)
+			if err != nil {
+				return 0, errors.New("mark must be >= 0")
+			}
+
+			return cm, nil
+		}
+
+		/* default */
+		return std_mark, nil
+	}
+
+	var mark uint64 = gjson.Get(db, "cm").Uint()
+	isMarkExists := gjson.Get(db, "cm").Exists()
+	if len(args) > 3 && isMarkExists {
+		cm, err := strconv.ParseUint(args[3], 10, 32)
+		if err != nil {
+			return 0, errors.New("mark must be >= 0")
+		}
+
+		if cm > mark {
+			return 0, errors.New(fmt.Sprintf("mark cannot be larger than '%d'", mark))
+		}
+		mark = cm
+	}
+	return mark, nil
 }
 
 func (s *server) pwd(c *client) {
