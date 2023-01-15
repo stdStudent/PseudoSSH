@@ -351,6 +351,15 @@ func (s *server) write(c *client, args []string) {
 			}
 
 			markOfFile := gjson.Get(old_db, pathToFile+".cm").Uint()
+			contentOfGroup, _ := os.ReadFile(group_path + fileGroup + ".json")
+			db_group := string(contentOfGroup)
+			markOfGroup := gjson.Get(db_group, "cm").Uint()
+
+			if !(markOfGroup == markOfFile) {
+				c.msg(fmt.Sprintf("MS: '%s':'%d' must be == '%d' of the file.", fileGroup, markOfGroup, markOfFile))
+				return
+			}
+
 			if !(c.cm == markOfFile) {
 				c.msg(fmt.Sprintf("MS: Your mark '%d' must equal to the file's mark '%d'", c.cm, markOfFile))
 				return
@@ -443,6 +452,15 @@ func (s *server) read(c *client, args []string) {
 		}
 
 		markOfFile := gjson.Get(db, pathToFile+".cm").Uint()
+		contentOfGroup, _ := os.ReadFile(group_path + fileGroup + ".json")
+		db_group := string(contentOfGroup)
+		markOfGroup := gjson.Get(db_group, "cm").Uint()
+
+		if !(markOfGroup >= markOfFile) {
+			c.msg(fmt.Sprintf("MS: '%s':'%d' must be >= '%d' of the file.", fileGroup, markOfGroup, markOfFile))
+			return
+		}
+
 		if !(c.cm >= markOfFile) {
 			c.msg(fmt.Sprintf("MS: Your mark '%d' must be >= the mark '%d' of the file.", c.cm, markOfFile))
 			return
@@ -681,7 +699,7 @@ func (s *server) addgroup(c *client, args []string) {
 	}
 
 	if len(args) < 2 {
-		c.msg(`Wrong usage. Example: "addgroup [group]"`)
+		c.msg(`Wrong usage. Example: "addgroup [group] "mark" {mark}"`)
 		return
 	}
 
@@ -692,7 +710,14 @@ func (s *server) addgroup(c *client, args []string) {
 		return
 	}
 
+	mark, mErr := getMark(args, "")
+	if mErr != nil {
+		c.err(mErr)
+		return
+	}
+
 	db, _ := sjson.Set("", "name", group)
+	db, _ = sjson.Set(db, "cm", mark)
 	_ = os.MkdirAll(group_path, os.ModePerm)
 	_ = os.WriteFile(pathToFile, []byte(db), 0755)
 
@@ -975,6 +1000,15 @@ func (s *server) append(c *client, args []string) {
 			}
 
 			markOfFile := gjson.Get(old_db, pathToFile+".cm").Uint()
+			contentOfGroup, _ := os.ReadFile(group_path + fileGroup + ".json")
+			db_group := string(contentOfGroup)
+			markOfGroup := gjson.Get(db_group, "cm").Uint()
+
+			if !(markOfGroup <= markOfFile) {
+				c.msg(fmt.Sprintf("MS: '%s':'%d' must be <= '%d' of the file.", fileGroup, markOfGroup, markOfFile))
+				return
+			}
+
 			if !(c.cm <= markOfFile) {
 				c.msg(fmt.Sprintf("MS: Your mark '%d' must be <= the mark '%d' of the file.", c.cm, markOfFile))
 				return
