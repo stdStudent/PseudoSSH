@@ -180,6 +180,18 @@ func (s *server) chpswd(c *client, args []string) {
 	c.msg(fmt.Sprintf("You have successfully changed password for '%s'.", nick))
 }
 
+func appendGroups(c *client) {
+	matches, _ := filepath.Glob(filepath.Join(group_path, "*.json"))
+	for _, file := range matches {
+		content, _ := os.ReadFile(file)
+		db := string(content)
+		isInGroup, _ := inGroup(db, c.nick)
+		if isInGroup {
+			c.groups = append(c.groups, gjson.Get(db, "name").String())
+		}
+	}
+}
+
 func (s *server) login(c *client, args []string) {
 	if len(args) < 3 {
 		c.msg(`A nick and a password are required. Example: "login [nick] [pswd]"`)
@@ -224,15 +236,7 @@ func (s *server) login(c *client, args []string) {
 		c.homeDir = "/home"
 		c.currDir = c.homeDir
 
-		matches, _ := filepath.Glob(filepath.Join(group_path, "*.json"))
-		for _, file := range matches {
-			content, _ := os.ReadFile(file)
-			db := string(content)
-			isInGroup, _ := inGroup(db, c.nick)
-			if isInGroup {
-				c.groups = append(c.groups, gjson.Get(db, "name").String())
-			}
-		}
+		appendGroups(c)
 
 		c.msg("You have successfully logged in.")
 		log.Printf("A user '%s' has connected.", c.nick)
@@ -267,6 +271,9 @@ func (s *server) write(c *client, args []string) {
 	pathToFile := filepath.Join(c.actDir, args[1])
 	content, _ := os.ReadFile(db_files)
 	old_db := string(content)
+
+	c.groups = c.groups[:0]
+	appendGroups(c)
 
 	isExists := false
 	if _, err := os.Stat(pathToFile); err == nil {
@@ -349,6 +356,9 @@ func (s *server) read(c *client, args []string) {
 		return
 	}
 
+	c.groups = c.groups[:0]
+	appendGroups(c)
+
 	isFullPath := strings.HasPrefix(args[1], users_path)
 	var err error
 	var text []byte
@@ -362,6 +372,12 @@ func (s *server) read(c *client, args []string) {
 
 	content, _ := os.ReadFile(db_files)
 	db := string(content)
+
+	if !gjson.Get(db, pathToFile).Exists() {
+		c.msg("DB: There is no such file in the database.")
+		return
+	}
+
 	fileRights := gjson.Get(db, pathToFile+".rights").Int()
 	switch fileRights & 0b1010 {
 	case 0b1010:
