@@ -197,7 +197,7 @@ func appendGroups(c *client) {
 
 func (s *server) login(c *client, args []string) {
 	if len(args) < 3 {
-		c.msg(`A nick and a password are required. Example: "login [nick] [pswd]"`)
+		c.msg(`A nick and a password are required. Example: "login [nick] [pswd] {cm}"`)
 		return
 	}
 
@@ -229,7 +229,15 @@ func (s *server) login(c *client, args []string) {
 		c.isLoggedIn = true
 		c.isAdmin = gjson.Get(db, "isAdmin").Bool()
 
+		var mark uint64 = 50
+		if len(args) > 3 {
+			mark, _ = strconv.ParseUint(args[3], 10, 32)
+		}
+		c.cm = mark
+
 		db, _ = sjson.Set(db, "isActive", true)
+		db, _ = sjson.Set(db, "cm", c.cm)
+
 		err := os.WriteFile(pathToFile, []byte(db), 0755)
 		if err != nil {
 			log.Printf("Could NOU open file '%s'", db_path+c.nick+".json")

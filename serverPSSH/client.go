@@ -25,6 +25,9 @@ type client struct {
 
 	// lab2
 	groups []string
+
+	// lab3
+	cm uint64
 }
 
 func isNetConnClosedErr(err error) bool {
