@@ -1068,6 +1068,11 @@ func (s *server) chmark(c *client, args []string) {
 			return
 		}
 
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("File '%s' does NOT exists.", pathToFile))
+			return
+		}
+
 		owner := gjson.Get(old_db, pathToFile+".owner").String()
 		if c.nick != owner {
 			c.msg("You are not the owner of this file.")
@@ -1093,6 +1098,11 @@ func (s *server) chmark(c *client, args []string) {
 				}
 			} else {
 				pathToFile := db_path + object + ".json"
+				if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+					c.msg(fmt.Sprintf("User '%s' does NOT exists.", object))
+					return
+				}
+
 				content, _ := os.ReadFile(pathToFile)
 				db := string(content)
 
@@ -1106,6 +1116,11 @@ func (s *server) chmark(c *client, args []string) {
 			}
 
 			pathToFile := db_path + c.nick + ".json"
+			if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+				c.msg(fmt.Sprintf("User '%s' does NOT exists.", c.nick))
+				return
+			}
+
 			content, _ := os.ReadFile(pathToFile)
 			db := string(content)
 
@@ -1116,8 +1131,26 @@ func (s *server) chmark(c *client, args []string) {
 			}
 		}
 
+	case "g":
+		if !c.isAdmin {
+			c.msg("Only admin can change mark for groups.")
+			return
+		}
+
+		pathToFile := group_path + object + ".json"
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("Group '%s' does NOT exists.", object))
+			return
+		}
+
+		content, _ := os.ReadFile(pathToFile)
+		db := string(content)
+
+		db, _ = sjson.Set(db, "cm", mark)
+		_ = os.WriteFile(pathToFile, []byte(db), 0755)
+
 	default:
-		c.msg("Second option must be either of 'f', 'u', 'g'")
+		c.msg("First option must be either of 'f', 'u', 'g'")
 		return
 	}
 
