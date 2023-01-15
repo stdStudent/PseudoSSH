@@ -26,6 +26,7 @@ const (
 
 	//lab3
 	CmdAppend
+	CmdChMark
 )
 
 type command struct {

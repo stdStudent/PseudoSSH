@@ -94,6 +94,9 @@ func (s *server) run() {
 		// lab3
 		case CmdAppend:
 			s.append(cmd.client, cmd.args)
+
+		case CmdChMark:
+			s.chmark(cmd.client, cmd.args)
 		}
 	}
 }
@@ -373,7 +376,7 @@ func (s *server) write(c *client, args []string) {
 			}
 
 		default:
-			c.msg("DS: NOT allowed to read this file due to the rights.")
+			c.msg("DS: NOT allowed to write to this file due to the rights.")
 			return
 		}
 	}
@@ -391,7 +394,7 @@ func (s *server) write(c *client, args []string) {
 	if !isExists {
 		new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
 	}
-	new_db, _ = sjson.Set("", pathToFile+".cm", std_mark)
+	new_db, _ = sjson.Set(new_db, pathToFile+".cm", std_mark)
 
 	if old_db != "" { // files.json is NOT empty
 		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
@@ -1028,4 +1031,58 @@ func (s *server) append(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("You have successfully appended text to '%s'", pathToFile))
+}
+
+func (s *server) chmark(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if len(args) < 4 {
+		c.msg(`Wrong usage. Example: "chmark (f|u|g) [object] [mark]"`)
+		return
+	}
+
+	mod := args[1]
+	object := args[2]
+	mark, mErr := getMark(args, "")
+	if mErr != nil {
+		c.err(mErr)
+		return
+	}
+
+	switch mod {
+	case "f":
+		if mark > c.cm {
+			c.msg(fmt.Sprintf("New mark '%d' can't be higher than your current mark: '%d'", mark, c.cm))
+			return
+		}
+
+		content, _ := os.ReadFile(db_files)
+		old_db := string(content)
+
+		pathToFile, err := getPathToFile(c, object)
+		if err != nil {
+			c.err(err)
+			return
+		}
+
+		owner := gjson.Get(old_db, pathToFile+".owner").String()
+		if c.nick != owner {
+			c.msg("You are not the owner of this file.")
+			return
+		}
+
+		new_db, _ := sjson.Set("", pathToFile+".cm", mark)
+		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
+		merged, _ := result.MarshalJSON()
+		_ = os.WriteFile(db_files, []byte(merged), 0755)
+
+	default:
+		c.msg("Second option must be either of 'f', 'u', 'g'")
+		return
+	}
+
+	c.msg(fmt.Sprintf("You have successfully changed mark for '%s'", object))
 }
