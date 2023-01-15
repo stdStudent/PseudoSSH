@@ -97,6 +97,9 @@ func (s *server) run() {
 
 		case CmdChMark:
 			s.chmark(cmd.client, cmd.args)
+
+		case CmdGM:
+			s.gm(cmd.client, cmd.args)
 		}
 	}
 }
@@ -1155,4 +1158,85 @@ func (s *server) chmark(c *client, args []string) {
 	}
 
 	c.msg(fmt.Sprintf("You have successfully changed mark for '%s'", object))
+}
+
+func (s *server) gm(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "gm (f|u|g) {object}"`)
+		return
+	}
+
+	mod := args[1]
+	object := args[2]
+
+	switch mod {
+	case "f":
+		content, _ := os.ReadFile(db_files)
+		db := string(content)
+
+		pathToFile, err := getPathToFile(c, object)
+		if err != nil {
+			c.err(err)
+			return
+		}
+
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("File '%s' does NOT exists.", pathToFile))
+			return
+		}
+
+		/*owner := gjson.Get(old_db, pathToFile+".owner").String()
+		if c.nick != owner {
+			c.msg("You are not the owner of this file.")
+			return
+		}*/
+
+		markOfFile := gjson.Get(db, pathToFile+".cm").Uint()
+		c.msg(fmt.Sprintf("Mark of file '%s' is '%d'", pathToFile, markOfFile))
+
+	case "u":
+		if c.nick == object {
+			c.msg(fmt.Sprintf("Your current mark is '%d'", c.cm))
+			return
+		}
+
+		if !c.isAdmin {
+			c.msg("Only admin can see other's max mark")
+			return
+		}
+
+		pathToFile := db_path + object + ".json"
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("User '%s' does NOT exists.", object))
+			return
+		}
+
+		content, _ := os.ReadFile(pathToFile)
+		db := string(content)
+
+		markOfUser := gjson.Get(db, "cm").Uint()
+		c.msg(fmt.Sprintf("Max mark of user '%s' is '%d'", object, markOfUser))
+
+	case "g":
+		pathToFile := group_path + object + ".json"
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("Group '%s' does NOT exists.", object))
+			return
+		}
+
+		content, _ := os.ReadFile(pathToFile)
+		db := string(content)
+
+		markOfGroup := gjson.Get(db, "cm").Uint()
+		c.msg(fmt.Sprintf("Mark of group '%s' is '%d'", object, markOfGroup))
+
+	default:
+		c.msg("First option must be either of 'f', 'u', 'g'")
+		return
+	}
 }
