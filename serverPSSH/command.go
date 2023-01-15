@@ -23,6 +23,9 @@ const (
 	CmdRmGroup
 	CmdRR
 	CmdChMod
+
+	//lab3
+	CmdAppend
 )
 
 type command struct {

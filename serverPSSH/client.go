@@ -188,6 +188,14 @@ func (c *client) readInput() {
 				args:   args,
 			}
 
+		// lab3
+		case "append":
+			c.commands <- command{
+				id:     CmdAppend,
+				client: c,
+				args:   args,
+			}
+
 		default:
 			c.err(fmt.Errorf(`unknown command "%s"`, cmd))
 		}

@@ -88,6 +88,10 @@ func (s *server) run() {
 
 		case CmdChMod:
 			s.chmod(cmd.client, cmd.args)
+
+		// lab3
+		case CmdAppend:
+			s.append(cmd.client, cmd.args)
 		}
 	}
 }
@@ -864,4 +868,80 @@ func getPathToFile(c *client, arg string) (string, error) {
 		}
 		return filepath.Join(c.actDir, arg), nil
 	}
+}
+
+// lab3
+func (s *server) append(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "append [filename] [text]"`)
+		return
+	}
+
+	pathToFile, err := getPathToFile(c, args[1])
+	if err != nil {
+		c.err(err)
+		return
+	}
+
+	content, _ := os.ReadFile(db_files)
+	old_db := string(content)
+
+	c.groups = c.groups[:0]
+	appendGroups(c)
+
+	isExists := false
+	if _, err := os.Stat(pathToFile); err == nil {
+		isExists = true
+	}
+
+	f, err := os.OpenFile(pathToFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0755)
+	if err != nil {
+		c.err(err)
+		return
+	}
+	defer f.Close()
+
+	if !isExists {
+		c.msg(fmt.Sprintf("File '%s' does NOT exists.", pathToFile))
+		return
+	} else {
+		fileRights := gjson.Get(old_db, pathToFile+".rights").Int()
+		switch fileRights & 0b0101 {
+		case 0b0101:
+			if c.nick != gjson.Get(old_db, pathToFile+".owner").String() {
+				c.msg("DS: You are not the owner of this file.")
+				return
+			}
+
+			isAllowedToWrite := false
+			fileGroup := gjson.Get(old_db, pathToFile+".group").String()
+			for _, group := range c.groups {
+				if group == fileGroup {
+					isAllowedToWrite = true
+				}
+			}
+
+			if isAllowedToWrite == false {
+				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
+				return
+			}
+
+			_, err := f.WriteString(strings.Join(args[2:], " "))
+			if err != nil {
+				c.err(err)
+				return
+			}
+
+		default:
+			c.msg("DS: NOT allowed to read this file due to the rights.")
+			return
+		}
+	}
+
+	c.msg(fmt.Sprintf("You have successfully appended text to '%s'", pathToFile))
 }
