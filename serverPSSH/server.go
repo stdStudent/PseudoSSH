@@ -350,6 +350,13 @@ func (s *server) write(c *client, args []string) {
 				return
 			}
 
+			markOfFile := gjson.Get(old_db, pathToFile+".cm").Uint()
+			if !(c.cm == markOfFile) {
+				c.msg(fmt.Sprintf("MS: Your mark '%d' must equal to the file's mark '%d'", c.cm, markOfFile))
+				return
+			}
+
+			/* Success */
 			err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
 			if err != nil {
 				c.err(err)
@@ -375,6 +382,7 @@ func (s *server) write(c *client, args []string) {
 	if !isExists {
 		new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
 	}
+	new_db, _ = sjson.Set("", pathToFile+".cm", std_mark)
 
 	if old_db != "" { // files.json is NOT empty
 		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
@@ -434,6 +442,13 @@ func (s *server) read(c *client, args []string) {
 			return
 		}
 
+		markOfFile := gjson.Get(db, pathToFile+".cm").Uint()
+		if !(c.cm >= markOfFile) {
+			c.msg(fmt.Sprintf("MS: Your mark '%d' must be >= the mark '%d' of the file.", c.cm, markOfFile))
+			return
+		}
+
+		/* Success */
 		text, err = os.ReadFile(pathToFile)
 		if err != nil { // Couldn't read from file
 			c.err(err)
@@ -959,6 +974,13 @@ func (s *server) append(c *client, args []string) {
 				return
 			}
 
+			markOfFile := gjson.Get(old_db, pathToFile+".cm").Uint()
+			if !(c.cm <= markOfFile) {
+				c.msg(fmt.Sprintf("MS: Your mark '%d' must be <= the mark '%d' of the file.", c.cm, markOfFile))
+				return
+			}
+
+			/* Success */
 			_, err := f.WriteString(strings.Join(args[2:], " "))
 			if err != nil {
 				c.err(err)
