@@ -1079,6 +1079,43 @@ func (s *server) chmark(c *client, args []string) {
 		merged, _ := result.MarshalJSON()
 		_ = os.WriteFile(db_files, []byte(merged), 0755)
 
+	case "u":
+		if c.isAdmin {
+			if c.nick == object {
+				pathToFile := db_path + c.nick + ".json"
+				content, _ := os.ReadFile(pathToFile)
+				db := string(content)
+
+				c.cm, mErr = getMark(args, db)
+				if mErr != nil {
+					c.err(mErr)
+					return
+				}
+			} else {
+				pathToFile := db_path + object + ".json"
+				content, _ := os.ReadFile(pathToFile)
+				db := string(content)
+
+				db, _ = sjson.Set(db, "cm", mark)
+				_ = os.WriteFile(pathToFile, []byte(db), 0755)
+			}
+		} else {
+			if c.nick != object {
+				c.msg(fmt.Sprintf("You are NOT '%s'", object))
+				return
+			}
+
+			pathToFile := db_path + c.nick + ".json"
+			content, _ := os.ReadFile(pathToFile)
+			db := string(content)
+
+			c.cm, mErr = getMark(args, db)
+			if mErr != nil {
+				c.err(mErr)
+				return
+			}
+		}
+
 	default:
 		c.msg("Second option must be either of 'f', 'u', 'g'")
 		return
