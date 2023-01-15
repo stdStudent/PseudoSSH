@@ -8,7 +8,6 @@ import (
 	"github.com/miracl/conflate"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
-	"io/fs"
 	"log"
 	"net"
 	"os"
@@ -263,12 +262,12 @@ func (s *server) write(c *client, args []string) {
 		return
 	}
 
-	if strings.HasPrefix(args[1], "../../..") {
-		c.msg("Cannot go higher than the root directory to write a file.")
+	pathToFile, err := getPathToFile(c, args[1])
+	if err != nil {
+		c.err(err)
 		return
 	}
 
-	pathToFile := filepath.Join(c.actDir, args[1])
 	content, _ := os.ReadFile(db_files)
 	old_db := string(content)
 
@@ -359,16 +358,14 @@ func (s *server) read(c *client, args []string) {
 	c.groups = c.groups[:0]
 	appendGroups(c)
 
-	isFullPath := strings.HasPrefix(args[1], users_path)
+	pathToFile, fErr := getPathToFile(c, args[1])
+	if fErr != nil {
+		c.err(fErr)
+		return
+	}
+
 	var err error
 	var text []byte
-
-	var pathToFile string
-	if isFullPath {
-		pathToFile = args[1]
-	} else {
-		pathToFile = filepath.Join(c.actDir, args[1])
-	}
 
 	content, _ := os.ReadFile(db_files)
 	db := string(content)
@@ -425,20 +422,13 @@ func (s *server) ls(c *client, args []string) {
 		return
 	}
 
-	isFullPath := strings.HasPrefix(args[1], users_path)
-	var err error
-	var files []fs.DirEntry
-
-	if isFullPath {
-		files, err = os.ReadDir(args[1])
-	} else {
-		if strings.HasPrefix(args[1], "../../..") {
-			c.msg("Cannot go higher than the root directory.")
-			return
-		}
-		files, err = os.ReadDir(filepath.Join(c.actDir, args[1]))
+	path, err := getPathToFile(c, args[1])
+	if err != nil {
+		c.err(err)
+		return
 	}
 
+	files, err := os.ReadDir(path)
 	if err != nil { // Couldn't read from dir
 		c.err(err)
 		return
@@ -802,13 +792,10 @@ func (s *server) rr(c *client, args []string) {
 		return
 	}
 
-	isFullPath := strings.HasPrefix(args[1], users_path)
-
-	var pathToFile string
-	if isFullPath {
-		pathToFile = args[1]
-	} else {
-		pathToFile = filepath.Join(c.actDir, args[1])
+	pathToFile, err := getPathToFile(c, args[1])
+	if err != nil {
+		c.err(err)
+		return
 	}
 
 	content, err := os.ReadFile(db_files)
@@ -840,13 +827,10 @@ func (s *server) chmod(c *client, args []string) {
 	}
 
 	rights := args[2]
-	isFullPath := strings.HasPrefix(args[1], users_path)
-
-	var pathToFile string
-	if isFullPath {
-		pathToFile = args[1]
-	} else {
-		pathToFile = filepath.Join(c.actDir, args[1])
+	pathToFile, err := getPathToFile(c, args[1])
+	if err != nil {
+		c.err(err)
+		return
 	}
 
 	content, _ := os.ReadFile(db_files)
@@ -868,4 +852,16 @@ func (s *server) chmod(c *client, args []string) {
 	_ = os.WriteFile(db_files, []byte(db), 0755)
 
 	c.msg(fmt.Sprintf("You have successfully changed rights for '%s'", pathToFile))
+}
+
+func getPathToFile(c *client, arg string) (string, error) {
+	isFullPath := strings.HasPrefix(arg, users_path)
+	if isFullPath {
+		return arg, nil
+	} else {
+		if strings.HasPrefix(arg, "../../..") {
+			return "", errors.New("cannot go higher than the root directory")
+		}
+		return filepath.Join(c.actDir, arg), nil
+	}
 }
