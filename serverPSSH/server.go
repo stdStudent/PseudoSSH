@@ -259,34 +259,75 @@ func (s *server) write(c *client, args []string) {
 		return
 	}
 
-	pathToFile := filepath.Join(c.actDir, args[1])
-	err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
-	if err != nil {
-		c.err(err)
+	if strings.HasPrefix(args[1], "../../..") {
+		c.msg("Cannot go higher than the root directory to write a file.")
 		return
+	}
+
+	pathToFile := filepath.Join(c.actDir, args[1])
+	content, _ := os.ReadFile(db_files)
+	old_db := string(content)
+
+	isExists := false
+	if _, err := os.Stat(pathToFile); err == nil {
+		isExists = true
+	}
+
+	if !isExists {
+		err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
+		if err != nil {
+			c.err(err)
+			return
+		}
+	} else {
+		fileRights := gjson.Get(old_db, pathToFile+".rights").Int()
+		switch fileRights & 0b0101 {
+		case 0b0101:
+			if c.nick != gjson.Get(old_db, pathToFile+".owner").String() {
+				c.msg("DS: You are not the owner of this file.")
+				return
+			}
+
+			isAllowedToWrite := false
+			fileGroup := gjson.Get(old_db, pathToFile+".group").String()
+			for _, group := range c.groups {
+				if group == fileGroup {
+					isAllowedToWrite = true
+				}
+			}
+
+			if isAllowedToWrite == false {
+				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
+				return
+			}
+
+			err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
+			if err != nil {
+				c.err(err)
+				return
+			}
+
+		default:
+			c.msg("DS: NOT allowed to read this file due to the rights.")
+			return
+		}
 	}
 
 	if strings.Contains(pathToFile, ".") {
 		pathToFile = strings.ReplaceAll(pathToFile, ".", "\\.")
 	}
 
-	content, _ := os.ReadFile(db_files)
-	old_db := string(content)
-
 	new_db, _ := sjson.Set("", pathToFile+".owner", c.nick)
 	if c.isAdmin {
-		new_db, _ = sjson.Set(new_db, pathToFile+".groups", "admins")
+		new_db, _ = sjson.Set(new_db, pathToFile+".group", "admins")
 	} else {
-		new_db, _ = sjson.Set(new_db, pathToFile+".groups", "users")
+		new_db, _ = sjson.Set(new_db, pathToFile+".group", "users")
 	}
-	new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
-
-	if strings.HasPrefix(args[1], "../../..") {
-		c.msg("Cannot go higher than the root directory to write a file.")
-		return
+	if !isExists {
+		new_db, _ = sjson.Set(new_db, pathToFile+".rights", 0b1110) // rwr_
 	}
 
-	if old_db != "" { // files.json is empty
+	if old_db != "" { // files.json is NOT empty
 		result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
 		merged, _ := result.MarshalJSON()
 		_ = os.WriteFile(db_files, []byte(merged), 0755)
@@ -329,20 +370,18 @@ func (s *server) read(c *client, args []string) {
 			return
 		}
 
-		fileGroups := gjson.Get(db, pathToFile+".groups").Array()
-		if len(c.groups) < len(fileGroups) {
-			c.msg(string(rune(len(c.groups))))
-			c.msg(string(rune(len(fileGroups))))
-			c.msg("DS: You are not in ENOUGH AMOUNT OF groups for this file.")
-			return
-		}
-		for i := range fileGroups {
-			c.msg(c.groups[i])
-			c.msg(fileGroups[i].String())
-			if c.groups[i] != fileGroups[i].String() {
-				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s' for this file.", fileGroups[i].String()))
-				return
+		isAllowedToRead := false
+		fileGroup := gjson.Get(db, pathToFile+".group").String()
+		c.msg(fileGroup)
+		for _, group := range c.groups {
+			if group == fileGroup {
+				isAllowedToRead = true
 			}
+		}
+
+		if isAllowedToRead == false {
+			c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
+			return
 		}
 
 		text, err = os.ReadFile(pathToFile)
@@ -354,9 +393,9 @@ func (s *server) read(c *client, args []string) {
 		c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
 
 	default:
-		c.msg("DS: NOT allowed to read this file.")
+		c.msg("DS: NOT allowed to read this file due to the rights.")
+		return
 	}
-
 }
 
 func (s *server) ls(c *client, args []string) {
@@ -426,6 +465,7 @@ func (s *server) logout(c *client) {
 	c.currDir = ""
 	c.isLoggedIn = false
 	c.isAdmin = false
+	c.groups = c.groups[:0]
 
 	c.msg("You have successfully logged out.")
 }
@@ -797,6 +837,12 @@ func (s *server) chmod(c *client, args []string) {
 	db := string(content)
 	if !gjson.Get(db, pathToFile).Exists() {
 		c.msg("DB: There is no such file in the database.")
+		return
+	}
+
+	owner := gjson.Get(db, pathToFile+".owner").String()
+	if c.nick != owner {
+		c.msg("You are not the owner of this file.")
 		return
 	}
 
