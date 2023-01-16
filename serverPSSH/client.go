@@ -28,6 +28,11 @@ type client struct {
 
 	// lab3
 	cm uint64
+
+	// lab4
+	isAudit        bool
+	isBeingAudited bool
+	loginAttempts  uint
 }
 
 func isNetConnClosedErr(err error) bool {
@@ -209,6 +214,14 @@ func (c *client) readInput() {
 		case "gm":
 			c.commands <- command{
 				id:     CmdGM,
+				client: c,
+				args:   args,
+			}
+
+		// lab4
+		case "watch":
+			c.commands <- command{
+				id:     CmdWatch,
 				client: c,
 				args:   args,
 			}

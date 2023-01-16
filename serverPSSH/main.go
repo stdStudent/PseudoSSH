@@ -14,6 +14,7 @@ func main() {
 		content, _ := os.ReadFile(file)
 		db := string(content)
 		db, _ = sjson.Set(db, "isActive", false)
+		db, _ = sjson.Set(db, "isBeingAudited", false) // lab4
 		err := os.WriteFile(file, []byte(db), 0755)
 		if err != nil {
 			log.Printf(err.Error())

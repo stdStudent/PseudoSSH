@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
@@ -8,18 +10,24 @@ import (
 	"github.com/miracl/conflate"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const users_path string = "users/"
 const db_path string = "db/"
 const group_path = "group/"
 const db_files = "files/files.json"
+const audits_path = "audits/"
+
+const iba = "isBeingAudited"
+const aoa = "amountOfAudits"
 
 const std_mark uint64 = 50
 
@@ -100,6 +108,10 @@ func (s *server) run() {
 
 		case CmdGM:
 			s.gm(cmd.client, cmd.args)
+
+		// lab4
+		case CmdWatch:
+			s.watch(cmd.client, cmd.args)
 		}
 	}
 }
@@ -225,20 +237,30 @@ func (s *server) login(c *client, args []string) {
 	pathToFile := db_path + c.nick + ".json"
 	content, _ := os.ReadFile(pathToFile)
 	db := string(content)
+	c.isBeingAudited = gjson.Get(db, iba).Bool()
 
 	isActive := gjson.Get(db, "isActive")
 	if isActive.Bool() {
 		c.msg("This user is already logged in.")
+
+		c.loginAttempts++
+		writeAudit(c, db, fmt.Sprintf("Failed relogin from '%s'. Attempt #%d", getIP(c), c.loginAttempts))
+
 		return
 	}
 
 	pswd := gjson.Get(db, "pswd")
 	if pswd.String() != c.pswd {
 		c.msg("Wrong password.")
+
+		c.loginAttempts++
+		writeAudit(c, db, fmt.Sprintf("Failed login from '%s'. Attempt #%d", getIP(c), c.loginAttempts))
+
 		return
 	} else {
 		c.isLoggedIn = true
 		c.isAdmin = gjson.Get(db, "isAdmin").Bool()
+		c.isAudit = gjson.Get(db, "isAudit").Bool()
 
 		mark, mErr := getMark(args, db)
 		if mErr != nil {
@@ -262,6 +284,103 @@ func (s *server) login(c *client, args []string) {
 
 		c.msg("You have successfully logged in.")
 		log.Printf("A user '%s' has connected.", c.nick)
+
+		c.loginAttempts++
+		writeAudit(c, db, fmt.Sprintf("Success login from '%s'. Attempt #%d", getIP(c), c.loginAttempts))
+
+		c.loginAttempts = 0 // success login
+	}
+}
+
+func removeLines(fn string, start, n int64) (err error) {
+	if start < 1 {
+		return errors.New("invalid request.  line numbers start at 1.")
+	}
+	if n < 0 {
+		return errors.New("invalid request.  negative number to remove.")
+	}
+	var f *os.File
+	if f, err = os.OpenFile(fn, os.O_RDWR, 0); err != nil {
+		return
+	}
+	defer func() {
+		if cErr := f.Close(); err == nil {
+			err = cErr
+		}
+	}()
+	var b []byte
+	if b, err = ioutil.ReadAll(f); err != nil {
+		return
+	}
+	cut, ok := skip(b, start-1)
+	if !ok {
+		return fmt.Errorf("less than %d lines", start)
+	}
+	if n == 0 {
+		return nil
+	}
+	tail, ok := skip(cut, n)
+	if !ok {
+		return fmt.Errorf("less than %d lines after line %d", n, start)
+	}
+	t := int64(len(b) - len(cut))
+	if err = f.Truncate(t); err != nil {
+		return
+	}
+	if len(tail) > 0 {
+		_, err = f.WriteAt(tail, t)
+	}
+	return
+}
+
+func skip(b []byte, n int64) ([]byte, bool) {
+	for ; n > 0; n-- {
+		if len(b) == 0 {
+			return nil, false
+		}
+		x := bytes.IndexByte(b, '\n')
+		if x < 0 {
+			x = len(b)
+		} else {
+			x++
+		}
+		b = b[x:]
+	}
+	return b, true
+}
+
+func writeAudit(c *client, db string, msg string) {
+	if c.isBeingAudited {
+		auditFile := audits_path + c.nick
+		f, _ := os.OpenFile(auditFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0755)
+
+		aoa := gjson.Get(db, aoa).Int()
+		if aoa != 0 {
+			file, _ := os.Open(auditFile)
+			var amount int64 = 0
+			fileScanner := bufio.NewScanner(file)
+			for fileScanner.Scan() {
+				amount++
+			}
+			_ = file.Close()
+
+			if amount > aoa {
+				_ = removeLines(auditFile, 1, amount-aoa+1)
+			} else if amount == aoa {
+				_ = removeLines(auditFile, 1, 1)
+			}
+		}
+
+		_, _ = f.WriteString(fmt.Sprintf("%s: %s: %s.\n", time.Now(), c.nick, msg))
+		_ = f.Close()
+	}
+}
+
+func getIP(c *client) string {
+	if addr, ok := c.conn.RemoteAddr().(*net.TCPAddr); ok {
+		return addr.IP.String()
+	} else {
+		return "invalid_ip"
 	}
 }
 
@@ -1234,6 +1353,59 @@ func (s *server) gm(c *client, args []string) {
 
 		markOfGroup := gjson.Get(db, "cm").Uint()
 		c.msg(fmt.Sprintf("Mark of group '%s' is '%d'", object, markOfGroup))
+
+	default:
+		c.msg("First option must be either of 'f', 'u', 'g'")
+		return
+	}
+}
+
+// lab4
+func (s *server) watch(c *client, args []string) {
+	if !c.isLoggedIn {
+		c.msg("You must log in first.")
+		return
+	}
+
+	if !c.isAudit {
+		c.msg("Only audit can watch.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg(`Wrong usage. Example: "audit (f|u|g) {object} [amount]"`)
+		return
+	}
+
+	mod := args[1]
+	object := args[2]
+	var amount uint64 = 0
+	var err error
+	if len(args) > 3 {
+		amount, err = strconv.ParseUint(args[3], 10, 32)
+		if err != nil {
+			c.msg("(amount) must be >= 0")
+			return
+		}
+	}
+
+	switch mod {
+	case "u":
+		pathToFile := db_path + object + ".json"
+		if _, err := os.Stat(pathToFile); errors.Is(err, os.ErrNotExist) {
+			c.msg(fmt.Sprintf("User '%s' does NOT exists.", object))
+			return
+		}
+
+		content, _ := os.ReadFile(pathToFile)
+		db := string(content)
+
+		boolAudit := !gjson.Get(db, iba).Bool()
+		db, _ = sjson.Set(db, iba, boolAudit)
+		db, _ = sjson.Set(db, aoa, amount)
+		_ = os.WriteFile(pathToFile, []byte(db), 0755)
+
+		c.msg(fmt.Sprintf("Changed audit to '%t' for user '%s'", boolAudit, object))
 
 	default:
 		c.msg("First option must be either of 'f', 'u', 'g'")

@@ -28,6 +28,7 @@ const (
 	CmdAppend
 	CmdChMark
 	CmdGM
+	CmdWatch
 )
 
 type command struct {
