@@ -366,6 +366,28 @@ func writeAudit(c *client, db string, msg string, rw int64, define string) {
 		_ = f.Close()
 
 	case "f": // file
+		content, _ := os.ReadFile(db_files)
+		db = string(content)
+
+		files := gjson.Parse(db)
+
+		for _, v := range files.Map() {
+			if gjson.Get(v.Raw, iba).Bool() == true {
+				auditFile := audits_path + "files"
+				f, _ := os.OpenFile(auditFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0755)
+
+				/*arw := gjson.Get(db, arw).Int()
+				if (arw != -1) && (rw != -1) && (arw&rw != rw) {
+					c.msg("Here2")
+					return
+				}*/
+
+				trimFile(db, auditFile)
+
+				_, _ = f.WriteString(fmt.Sprintf("%s: %s: %s.\n", time.Now(), c.nick, msg))
+				_ = f.Close()
+			}
+		}
 
 	default: // user
 		if c.isBeingAudited {
@@ -466,10 +488,14 @@ func (s *server) write(c *client, args []string) {
 	ucontent, _ := os.ReadFile(db_path + c.nick + ".json")
 	udb := string(ucontent)
 
+	fcontent, _ := os.ReadFile(db_files)
+	fdb := string(fcontent)
+
 	pathToFile, err := getPathToFile(c, args[1])
 	if err != nil {
 		c.err(err)
 		writeAudit(c, udb, fmt.Sprintf("Tried to write out-of-tree file '%s'", args[1]), 0b01, "")
+		writeAudit(c, fdb, fmt.Sprintf("Tried to write out-of-tree file '%s'", args[1]), 0b01, "f")
 		return
 	}
 
@@ -487,9 +513,11 @@ func (s *server) write(c *client, args []string) {
 	if !isExists {
 		err := os.WriteFile(pathToFile, []byte(strings.Join(args[2:], " ")), 0755)
 		writeAudit(c, udb, fmt.Sprintf("Wrote new file '%s'", pathToFile), 0b01, "")
+		writeAudit(c, fdb, fmt.Sprintf("Wrote new file '%s'", pathToFile), 0b01, "f")
 		if err != nil {
 			c.err(err)
 			writeAudit(c, udb, fmt.Sprintf("Couldn't write file '%s'", pathToFile), 0b01, "")
+			writeAudit(c, fdb, fmt.Sprintf("Couldn't write file '%s'", pathToFile), 0b01, "f")
 			return
 		}
 	} else {
@@ -507,6 +535,7 @@ func (s *server) write(c *client, args []string) {
 			if isAllowedToWrite == false {
 				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
 				writeAudit(c, udb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b01, "f")
 				return
 			}
 
@@ -518,12 +547,14 @@ func (s *server) write(c *client, args []string) {
 			if !(markOfGroup == markOfFile) {
 				c.msg(fmt.Sprintf("MS: '%s':'%d' must be == '%d' of the file.", fileGroup, markOfGroup, markOfFile))
 				writeAudit(c, udb, fmt.Sprintf("MS: '%s':'%d' must be == '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("MS: '%s':'%d' must be == '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b01, "f")
 				return
 			}
 
 			if !(c.cm == markOfFile) {
 				c.msg(fmt.Sprintf("MS: Your mark '%d' must equal to the file's mark '%d'", c.cm, markOfFile))
 				writeAudit(c, udb, fmt.Sprintf("MS: mark '%d' must equal to the file's mark '%d'", c.cm, markOfFile), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("MS: mark '%d' must equal to the file's mark '%d'", c.cm, markOfFile), 0b01, "f")
 				return
 			}
 
@@ -532,12 +563,14 @@ func (s *server) write(c *client, args []string) {
 			if err != nil {
 				c.err(err)
 				writeAudit(c, udb, err.Error(), 0b01, "")
+				writeAudit(c, fdb, err.Error(), 0b01, "f")
 				return
 			}
 
 		default:
 			c.msg("DS: NOT allowed to write to this file due to the rights.")
 			writeAudit(c, udb, "DS: NOT allowed to write to this file due to the rights.", 0b01, "")
+			writeAudit(c, fdb, "DS: NOT allowed to write to this file due to the rights.", 0b01, "f")
 			return
 		}
 	}
@@ -567,6 +600,7 @@ func (s *server) write(c *client, args []string) {
 
 	c.msg(fmt.Sprintf("You have successfully written text to '%s'", args[1]))
 	writeAudit(c, udb, fmt.Sprintf("successfully wrote text to '%s'", args[1]), 0b01, "")
+	writeAudit(c, fdb, fmt.Sprintf("successfully wrote text to '%s'", args[1]), 0b01, "f")
 }
 
 func (s *server) read(c *client, args []string) {
@@ -583,6 +617,9 @@ func (s *server) read(c *client, args []string) {
 	ucontent, _ := os.ReadFile(db_path + c.nick + ".json")
 	udb := string(ucontent)
 
+	fcontent, _ := os.ReadFile(db_files)
+	fdb := string(fcontent)
+
 	c.groups = c.groups[:0]
 	appendGroups(c)
 
@@ -590,6 +627,7 @@ func (s *server) read(c *client, args []string) {
 	if fErr != nil {
 		c.err(fErr)
 		writeAudit(c, udb, fmt.Sprintf("Tried to read out-of-tree file '%s'", args[1]), 0b10, "")
+		writeAudit(c, fdb, fmt.Sprintf("Tried to read out-of-tree file '%s'", args[1]), 0b10, "f")
 		return
 	}
 
@@ -602,6 +640,7 @@ func (s *server) read(c *client, args []string) {
 	if !gjson.Get(db, pathToFile).Exists() {
 		c.msg("DB: There is no such file in the database.")
 		writeAudit(c, udb, fmt.Sprintf("Tried to read non-data-based file '%s'", pathToFile), 0b10, "")
+		writeAudit(c, fdb, fmt.Sprintf("Tried to read non-data-based file '%s'", pathToFile), 0b10, "f")
 		return
 	}
 
@@ -619,6 +658,7 @@ func (s *server) read(c *client, args []string) {
 		if isAllowedToRead == false {
 			c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
 			writeAudit(c, udb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b10, "")
+			writeAudit(c, fdb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b10, "f")
 			return
 		}
 
@@ -630,12 +670,14 @@ func (s *server) read(c *client, args []string) {
 		if !(markOfGroup >= markOfFile) {
 			c.msg(fmt.Sprintf("MS: '%s':'%d' must be >= '%d' of the file.", fileGroup, markOfGroup, markOfFile))
 			writeAudit(c, udb, fmt.Sprintf("MS: '%s':'%d' must be >= '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b10, "")
+			writeAudit(c, fdb, fmt.Sprintf("MS: '%s':'%d' must be >= '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b10, "f")
 			return
 		}
 
 		if !(c.cm >= markOfFile) {
 			c.msg(fmt.Sprintf("MS: Your mark '%d' must be >= the mark '%d' of the file.", c.cm, markOfFile))
 			writeAudit(c, udb, fmt.Sprintf("MS: mark '%d' must be >= the mark '%d' of the file.", c.cm, markOfFile), 0b10, "")
+			writeAudit(c, fdb, fmt.Sprintf("MS: mark '%d' must be >= the mark '%d' of the file.", c.cm, markOfFile), 0b10, "f")
 			return
 		}
 
@@ -644,15 +686,18 @@ func (s *server) read(c *client, args []string) {
 		if err != nil { // Couldn't read from file
 			c.err(err)
 			writeAudit(c, udb, err.Error(), 0b10, "")
+			writeAudit(c, fdb, err.Error(), 0b10, "f")
 			return
 		}
 
 		c.msg(fmt.Sprintf("Text from file '%s':\n%s", args[1], text))
 		writeAudit(c, udb, fmt.Sprintf("Successfully read '%s'", args[1]), 0b10, "")
+		writeAudit(c, fdb, fmt.Sprintf("Successfully read '%s'", args[1]), 0b10, "f")
 
 	default:
 		c.msg("DS: NOT allowed to read this file due to the rights.")
 		writeAudit(c, udb, "DS: NOT allowed to read this file due to the rights.", 0b10, "")
+		writeAudit(c, fdb, "DS: NOT allowed to read this file due to the rights.", 0b10, "f")
 		return
 	}
 }
@@ -703,6 +748,8 @@ func (s *server) logout(c *client) {
 	if err != nil {
 		log.Printf(err.Error())
 	}
+
+	writeAudit(c, db, fmt.Sprintf("Success logout from '%s'", getIP(c)), -1, "")
 
 	if c.isConnErr {
 		log.Printf("A user '%s' has UNEXPECTEDLY disconnected.", c.nick)
@@ -1151,10 +1198,14 @@ func (s *server) append(c *client, args []string) {
 	ucontent, _ := os.ReadFile(db_path + c.nick + ".json")
 	udb := string(ucontent)
 
+	fcontent, _ := os.ReadFile(db_files)
+	fdb := string(fcontent)
+
 	pathToFile, err := getPathToFile(c, args[1])
 	if err != nil {
 		c.err(err)
 		writeAudit(c, udb, err.Error(), 0b01, "")
+		writeAudit(c, udb, err.Error(), 0b01, "f")
 		return
 	}
 
@@ -1173,6 +1224,7 @@ func (s *server) append(c *client, args []string) {
 	if err != nil {
 		c.err(err)
 		writeAudit(c, udb, err.Error(), 0b01, "")
+		writeAudit(c, fdb, err.Error(), 0b01, "f")
 		return
 	}
 	defer f.Close()
@@ -1180,6 +1232,7 @@ func (s *server) append(c *client, args []string) {
 	if !isExists {
 		c.msg(fmt.Sprintf("File '%s' does NOT exists.", pathToFile))
 		writeAudit(c, udb, fmt.Sprintf("File '%s' does NOT exists.", pathToFile), 0b01, "")
+		writeAudit(c, fdb, fmt.Sprintf("File '%s' does NOT exists.", pathToFile), 0b01, "f")
 		return
 	} else {
 		fileRights := gjson.Get(old_db, pathToFile+".rights").Int()
@@ -1196,6 +1249,7 @@ func (s *server) append(c *client, args []string) {
 			if isAllowedToWrite == false {
 				c.msg(fmt.Sprintf("DS: You are NOT in the group '%s'", fileGroup))
 				writeAudit(c, udb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("DS: not in the group '%s'", fileGroup), 0b01, "f")
 				return
 			}
 
@@ -1207,12 +1261,14 @@ func (s *server) append(c *client, args []string) {
 			if !(markOfGroup <= markOfFile) {
 				c.msg(fmt.Sprintf("MS: '%s':'%d' must be <= '%d' of the file.", fileGroup, markOfGroup, markOfFile))
 				writeAudit(c, udb, fmt.Sprintf("MS: '%s':'%d' must be <= '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("MS: '%s':'%d' must be <= '%d' of the file.", fileGroup, markOfGroup, markOfFile), 0b01, "f")
 				return
 			}
 
 			if !(c.cm <= markOfFile) {
 				c.msg(fmt.Sprintf("MS: Your mark '%d' must be <= the mark '%d' of the file.", c.cm, markOfFile))
 				writeAudit(c, udb, fmt.Sprintf("MS: mark '%d' must be <= the mark '%d' of the file.", c.cm, markOfFile), 0b01, "")
+				writeAudit(c, fdb, fmt.Sprintf("MS: mark '%d' must be <= the mark '%d' of the file.", c.cm, markOfFile), 0b01, "f")
 				return
 			}
 
@@ -1221,18 +1277,21 @@ func (s *server) append(c *client, args []string) {
 			if err != nil {
 				c.err(err)
 				writeAudit(c, udb, err.Error(), 0b01, "")
+				writeAudit(c, fdb, err.Error(), 0b01, "f")
 				return
 			}
 
 		default:
 			c.msg("DS: NOT allowed to read this file due to the rights.")
 			writeAudit(c, udb, "DS: NOT allowed to read this file due to the rights.", 0b01, "")
+			writeAudit(c, fdb, "DS: NOT allowed to read this file due to the rights.", 0b01, "f")
 			return
 		}
 	}
 
 	c.msg(fmt.Sprintf("You have successfully appended text to '%s'", pathToFile))
 	writeAudit(c, udb, fmt.Sprintf("You have successfully appended text to '%s'", pathToFile), 0b01, "")
+	writeAudit(c, fdb, fmt.Sprintf("You have successfully appended text to '%s'", pathToFile), 0b01, "f")
 }
 
 func (s *server) chmark(c *client, args []string) {
@@ -1515,6 +1574,27 @@ func (s *server) watch(c *client, args []string) {
 		_ = os.WriteFile(pathToFile, []byte(db), 0755)
 
 		c.msg(fmt.Sprintf("Changed audit to '%t' for group '%s'", boolAudit, object))
+
+	case "f":
+		content, _ := os.ReadFile(db_files)
+		old_db := string(content)
+
+		file, _ := getPathToFile(c, object)
+
+		boolAudit := !gjson.Get(old_db, file+"."+iba).Bool()
+		new_db, _ := sjson.Set("", file+"."+iba, boolAudit)
+		new_db, _ = sjson.Set(new_db, file+"."+aoa, amount)
+		new_db, _ = sjson.Set(new_db, file+"."+arw, rw)
+
+		if old_db != "" { // files.json is NOT empty
+			result, _ := conflate.FromData([]byte(old_db), []byte(new_db))
+			merged, _ := result.MarshalJSON()
+			_ = os.WriteFile(db_files, []byte(merged), 0755)
+		} else {
+			_ = os.WriteFile(db_files, []byte(new_db), 0755)
+		}
+
+		c.msg(fmt.Sprintf("Changed audit to '%t' for file '%s'", boolAudit, object))
 
 	default:
 		c.msg("First option must be either of 'f', 'u', 'g'")
